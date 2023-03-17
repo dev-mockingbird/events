@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -45,8 +46,7 @@ func TestKafkaQueue(t *testing.T) {
 			err = errors.New("type empty")
 			break
 		}
-		var i int
-		fmt.Sscanf(string(e.Data), "%d", &i)
+		i, _ := strconv.Atoi(string(e.Data))
 		rt += i
 		if rt >= total {
 			break

@@ -25,6 +25,10 @@ func KafkaQueue(config KafkaQueueConfig) EventQueue {
 	return &kafkaQueue{config: config}
 }
 
+func (q *kafkaQueue) Name() string {
+	return "kafka-" + q.config.Topic
+}
+
 func (q *kafkaQueue) Add(ctx context.Context, e *Event) (err error) {
 	q.wOnce.Do(func() {
 		q.w = &kafka.Writer{

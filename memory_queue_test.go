@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -28,8 +29,7 @@ func TestMemoryQueue(t *testing.T) {
 			if err = q.Next(context.Background(), &e); err != nil {
 				return
 			}
-			var i int
-			fmt.Sscanf(string(e.Data), "%d", &i)
+			i, _ := strconv.Atoi(string(e.Data))
 			ct += i
 			if ct >= total {
 				break

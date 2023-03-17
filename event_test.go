@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 func TestDefaultListener(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	listener := DefaultListener(10)
+	listener := DefaultListener(BufSize(10))
 	q := MemoryQueue(10)
 	var total int
 	var wg sync.WaitGroup
@@ -28,8 +29,7 @@ func TestDefaultListener(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		listener.Listen(context.Background(), q, HandleEvent(func(ctx context.Context, e *Event) error {
-			var i int
-			fmt.Sscanf(string(e.Data), "%d", &i)
+			i, _ := strconv.Atoi(string(e.Data))
 			ct += i
 			if ct >= total {
 				return ListenComplete
