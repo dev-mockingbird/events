@@ -9,18 +9,35 @@ import (
 	"go-micro.dev/v4/logger"
 )
 
+const (
+	DataEncodingHint = "data-decoding-hint"
+)
+
 var (
 	ListenComplete = errors.New("listen complete")
 )
 
 type Event struct {
-	ID   string
-	Type string
-	Data []byte
+	ID        string
+	Type      string
+	Metadata  map[string]string
+	CreatedAt time.Time
+	Data      []byte
 }
 
 func NewEvent(typ string, data []byte) *Event {
-	return &Event{ID: uuid.New().String(), Type: typ, Data: data}
+	return &Event{
+		ID:        uuid.New().String(),
+		Type:      typ,
+		Metadata:  make(map[string]string),
+		CreatedAt: time.Now(),
+		Data:      data,
+	}
+}
+
+func (e *Event) WithMetadata(k, v string) *Event {
+	e.Metadata[k] = v
+	return e
 }
 
 type EventQueue interface {
