@@ -33,7 +33,9 @@ func NewEvent(typ string, data ...[]byte) *Event {
 		CreatedAt: time.Now(),
 		Data: func() []byte {
 			if len(data) > 0 {
-				return data[0]
+				ret := make([]byte, len(data[0]))
+				copy(ret, data[0])
+				return ret
 			}
 			return []byte{}
 		}(),
