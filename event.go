@@ -18,20 +18,25 @@ var (
 )
 
 type Event struct {
-	ID        string
-	Type      string
-	Metadata  map[string]string
-	CreatedAt time.Time
-	Data      []byte
+	ID        string            `json:"id"`
+	Type      string            `json:"type"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	CreatedAt time.Time         `json:"created_at"`
+	Data      []byte            `json:"data,omitempty"`
 }
 
-func NewEvent(typ string, data []byte) *Event {
+func NewEvent(typ string, data ...[]byte) *Event {
 	return &Event{
 		ID:        uuid.New().String(),
 		Type:      typ,
 		Metadata:  make(map[string]string),
 		CreatedAt: time.Now(),
-		Data:      data,
+		Data: func() []byte {
+			if len(data) > 0 {
+				return data[0]
+			}
+			return []byte{}
+		}(),
 	}
 }
 

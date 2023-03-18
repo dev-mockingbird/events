@@ -37,12 +37,14 @@ func (q *kafkaQueue) Add(ctx context.Context, e *Event) (err error) {
 		}
 	})
 	msg := kafka.Message{
-		Key:   []byte(e.ID),
-		Value: e.Data,
-		Headers: []kafka.Header{{
-			Key:   "Type",
-			Value: []byte(e.Type),
-		}},
+		Key:     []byte(e.ID),
+		Value:   e.Data,
+		Headers: make([]kafka.Header, len(e.Metadata)+1),
+	}
+	msg.Headers[0] = kafka.Header{Key: "__type__", Value: []byte(e.Type)}
+	var i int = 1
+	for k, v := range e.Metadata {
+		msg.Headers[i] = kafka.Header{Key: k, Value: []byte(v)}
 	}
 	if err := q.w.WriteMessages(ctx, msg); err != nil {
 		return err
@@ -62,13 +64,15 @@ func (q *kafkaQueue) Next(ctx context.Context, e *Event) (err error) {
 	if msg, err = q.r.ReadMessage(ctx); err != nil {
 		return
 	}
+	e.Metadata = make(map[string]string)
 	for _, h := range msg.Headers {
-		if h.Key == "Type" {
-			typ := make([]byte, len(h.Value))
-			copy(typ, h.Value)
-			e.Type = string(typ)
-			break
+		val := make([]byte, len(h.Value))
+		copy(val, h.Value)
+		if h.Key == "__type__" {
+			e.Type = string(val)
+			continue
 		}
+		e.Metadata[h.Key] = string(val)
 	}
 	e.Data = make([]byte, len(msg.Value))
 	copy(e.Data, msg.Value)
