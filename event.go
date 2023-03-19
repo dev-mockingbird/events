@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/dev-mockingbird/logf"
 	"github.com/google/uuid"
 	"go-micro.dev/v4/logger"
 )
@@ -80,7 +81,7 @@ type DefaultListenerConfig struct {
 	BufSize int
 	// NextRetries if read next message failed, it should retry automatically NexRetries times
 	NextRetryStrategy NextRetryStrategy
-	Logger            logger.Logger
+	Logger            logf.Logfer
 }
 
 type DefaultListenerOption func(cfg *DefaultListenerConfig)
@@ -120,7 +121,7 @@ func completeListenConfig(cfg *DefaultListenerConfig) {
 		cfg.NextRetryStrategy = RetryAny(3, time.Second)
 	}
 	if cfg.Logger == nil {
-		cfg.Logger = logger.DefaultLogger
+		cfg.Logger = logf.New()
 	}
 }
 
@@ -177,7 +178,7 @@ func DefaultListener(opts ...DefaultListenerOption) EventListener {
 						break
 					}
 					buf <- &e
-					cfg.Logger.Logf(logger.InfoLevel, "read from queue [%s]: %v", q.Name(), e)
+					cfg.Logger.Logf(logger.DebugLevel, "read from queue [%s]: %v", q.Name(), e)
 				}
 			}
 		}()

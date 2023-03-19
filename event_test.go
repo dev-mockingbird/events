@@ -3,14 +3,17 @@ package events
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 )
 
 func TestDefaultListener(t *testing.T) {
+	rand.Seed(time.Now().UnixMicro())
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	listener := DefaultListener(BufSize(10))

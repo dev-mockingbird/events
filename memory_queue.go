@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -12,11 +13,11 @@ type memoryQueue struct {
 }
 
 func MemoryQueue(bufSize int) EventQueue {
-	return &memoryQueue{buffer: make(chan Event, bufSize), name: uuid.NewString()}
+	return &memoryQueue{buffer: make(chan Event, bufSize), name: fmt.Sprintf("%d", uuid.New().ID())}
 }
 
 func (q memoryQueue) Name() string {
-	return "memory_" + q.name
+	return "memory-" + q.name
 }
 
 func (q memoryQueue) Add(ctx context.Context, e *Event) error {

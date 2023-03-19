@@ -26,7 +26,7 @@ func KafkaQueue(config KafkaQueueConfig) EventQueue {
 }
 
 func (q *kafkaQueue) Name() string {
-	return "kafka-" + q.config.Topic
+	return "kafka-" + q.config.Topic + "-" + q.config.ConsumerName
 }
 
 func (q *kafkaQueue) Add(ctx context.Context, e *Event) (err error) {
