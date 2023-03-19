@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -165,7 +166,7 @@ func DefaultListener(opts ...DefaultListenerOption) EventListener {
 					for {
 						if err := q.Next(ctx, &e); err != nil {
 							cfg.Logger.Logf(logger.ErrorLevel, "read next from queue[%s](retry %d): %s", q.Name(), retry, err.Error())
-							if cfg.NextRetryStrategy(retry, err) {
+							if !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err) {
 								retry++
 								continue
 							}
