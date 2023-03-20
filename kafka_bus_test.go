@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestKafkaQueue(t *testing.T) {
+func TestKafkaBus(t *testing.T) {
 	broker := os.Getenv("KAFKA_BROKERS")
 	topic := os.Getenv("KAFKA_TEST_TOPIC")
 	if broker == "" || topic == "" {
@@ -16,7 +16,7 @@ func TestKafkaQueue(t *testing.T) {
 		return
 	}
 	brokers := strings.Split(broker, ",")
-	q := KafkaQueue(KafkaBrokers(brokers...), KafkaTopic(topic), KafkaConsumerName("test"))
+	q := KafkaBus(KafkaBrokers(brokers...), KafkaTopic(topic), KafkaConsumerName("test"))
 	ctx := context.Background()
 	var total int
 	for i := 0; i < 10; i++ {

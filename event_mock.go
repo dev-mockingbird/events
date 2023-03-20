@@ -11,31 +11,31 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockQueue is a mock of Queue interface.
-type MockQueue struct {
+// MockEventBus is a mock of EventBus interface.
+type MockEventBus struct {
 	ctrl     *gomock.Controller
-	recorder *MockQueueMockRecorder
+	recorder *MockEventBusMockRecorder
 }
 
-// MockQueueMockRecorder is the mock recorder for MockQueue.
-type MockQueueMockRecorder struct {
-	mock *MockQueue
+// MockEventBusMockRecorder is the mock recorder for MockEventBus.
+type MockEventBusMockRecorder struct {
+	mock *MockEventBus
 }
 
-// NewMockQueue creates a new mock instance.
-func NewMockQueue(ctrl *gomock.Controller) *MockQueue {
-	mock := &MockQueue{ctrl: ctrl}
-	mock.recorder = &MockQueueMockRecorder{mock}
+// NewMockEventBus creates a new mock instance.
+func NewMockEventBus(ctrl *gomock.Controller) *MockEventBus {
+	mock := &MockEventBus{ctrl: ctrl}
+	mock.recorder = &MockEventBusMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockQueue) EXPECT() *MockQueueMockRecorder {
+func (m *MockEventBus) EXPECT() *MockEventBusMockRecorder {
 	return m.recorder
 }
 
 // Add mocks base method.
-func (m *MockQueue) Add(ctx context.Context, e *Event) error {
+func (m *MockEventBus) Add(ctx context.Context, e *Event) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Add", ctx, e)
 	ret0, _ := ret[0].(error)
@@ -43,13 +43,13 @@ func (m *MockQueue) Add(ctx context.Context, e *Event) error {
 }
 
 // Add indicates an expected call of Add.
-func (mr *MockQueueMockRecorder) Add(ctx, e interface{}) *gomock.Call {
+func (mr *MockEventBusMockRecorder) Add(ctx, e interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockQueue)(nil).Add), ctx, e)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockEventBus)(nil).Add), ctx, e)
 }
 
 // Name mocks base method.
-func (m *MockQueue) Name() string {
+func (m *MockEventBus) Name() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Name")
 	ret0, _ := ret[0].(string)
@@ -57,13 +57,13 @@ func (m *MockQueue) Name() string {
 }
 
 // Name indicates an expected call of Name.
-func (mr *MockQueueMockRecorder) Name() *gomock.Call {
+func (mr *MockEventBusMockRecorder) Name() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockQueue)(nil).Name))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockEventBus)(nil).Name))
 }
 
 // Next mocks base method.
-func (m *MockQueue) Next(ctx context.Context, e *Event) error {
+func (m *MockEventBus) Next(ctx context.Context, e *Event) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Next", ctx, e)
 	ret0, _ := ret[0].(error)
@@ -71,9 +71,9 @@ func (m *MockQueue) Next(ctx context.Context, e *Event) error {
 }
 
 // Next indicates an expected call of Next.
-func (mr *MockQueueMockRecorder) Next(ctx, e interface{}) *gomock.Call {
+func (mr *MockEventBusMockRecorder) Next(ctx, e interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockQueue)(nil).Next), ctx, e)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockEventBus)(nil).Next), ctx, e)
 }
 
 // MockHandler is a mock of Handler interface.
@@ -137,7 +137,7 @@ func (m *MockListener) EXPECT() *MockListenerMockRecorder {
 }
 
 // Listen mocks base method.
-func (m *MockListener) Listen(ctx context.Context, q Queue, handle Handler) error {
+func (m *MockListener) Listen(ctx context.Context, q EventBus, handle Handler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Listen", ctx, q, handle)
 	ret0, _ := ret[0].(error)

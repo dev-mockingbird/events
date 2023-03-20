@@ -9,53 +9,53 @@ import (
 
 const kafkaTypeKey = "__type__"
 
-type kafkaQueue struct {
-	config KafkaQueueConfig
+type kafkabus struct {
+	config KafkaEventBusConfig
 	w      *kafka.Writer
 	wOnce  sync.Once
 	r      *kafka.Reader
 	rOnce  sync.Once
 }
 
-type KafkaQueueConfig struct {
+type KafkaEventBusConfig struct {
 	Brokers      []string
 	Topic        string
 	ConsumerName string
 }
 
-type KafkaQueueOption func(config *KafkaQueueConfig)
+type KafkaEventBusOption func(config *KafkaEventBusConfig)
 
-func KafkaBrokers(brokers ...string) KafkaQueueOption {
-	return func(config *KafkaQueueConfig) {
+func KafkaBrokers(brokers ...string) KafkaEventBusOption {
+	return func(config *KafkaEventBusConfig) {
 		config.Brokers = brokers
 	}
 }
 
-func KafkaTopic(topic string) KafkaQueueOption {
-	return func(config *KafkaQueueConfig) {
+func KafkaTopic(topic string) KafkaEventBusOption {
+	return func(config *KafkaEventBusConfig) {
 		config.Topic = topic
 	}
 }
 
-func KafkaConsumerName(name string) KafkaQueueOption {
-	return func(config *KafkaQueueConfig) {
+func KafkaConsumerName(name string) KafkaEventBusOption {
+	return func(config *KafkaEventBusConfig) {
 		config.ConsumerName = name
 	}
 }
 
-func KafkaQueue(opts ...KafkaQueueOption) Queue {
-	q := kafkaQueue{}
+func KafkaBus(opts ...KafkaEventBusOption) EventBus {
+	q := kafkabus{}
 	for _, opt := range opts {
 		opt(&q.config)
 	}
 	return &q
 }
 
-func (q *kafkaQueue) Name() string {
+func (q *kafkabus) Name() string {
 	return "kafka-" + q.config.Topic + "-" + q.config.ConsumerName
 }
 
-func (q *kafkaQueue) Add(ctx context.Context, e *Event) (err error) {
+func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
 	q.wOnce.Do(func() {
 		q.w = &kafka.Writer{
 			Addr:  kafka.TCP(q.config.Brokers...),
@@ -81,7 +81,7 @@ func (q *kafkaQueue) Add(ctx context.Context, e *Event) (err error) {
 	return nil
 }
 
-func (q *kafkaQueue) Next(ctx context.Context, e *Event) (err error) {
+func (q *kafkabus) Next(ctx context.Context, e *Event) (err error) {
 	q.rOnce.Do(func() {
 		q.r = kafka.NewReader(kafka.ReaderConfig{
 			Brokers: q.config.Brokers,
@@ -112,7 +112,7 @@ func (q *kafkaQueue) Next(ctx context.Context, e *Event) (err error) {
 	return
 }
 
-func (q *kafkaQueue) Close() error {
+func (q *kafkabus) Close() error {
 	if q.r != nil {
 		if err := q.r.Close(); err != nil {
 			return err

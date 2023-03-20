@@ -7,7 +7,7 @@ import (
 )
 
 func TestMemoryQueue(t *testing.T) {
-	q := MemoryQueue(10)
+	q := MemoryEventBus(10)
 	var wg sync.WaitGroup
 	wg.Add(2)
 	var total int

@@ -15,7 +15,7 @@ func TestDefaultListener(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	listener := DefaultListener(BufSize(10))
-	q := MemoryQueue(10)
+	q := MemoryEventBus(10)
 	var total int
 	var wg sync.WaitGroup
 	wg.Add(2)

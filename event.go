@@ -116,8 +116,8 @@ func (e *Event) UnpackPayload(data any, unpackers ...PayloadUnpacker) error {
 	return UnsupportedEncoding(hint)
 }
 
-// Queue, an event queue
-type Queue interface {
+// EventBus, an event bus
+type EventBus interface {
 	// Name, the queue must have a name, the logger will use this to record the activitity
 	Name() string
 	// Add, push event to the queue
@@ -146,12 +146,12 @@ func (handle Handle) Handle(ctx context.Context, e *Event) error {
 // Listener, the event queue listener, it will get the next event and pass it to handler
 type Listener interface {
 	// Listen, start listen event queue
-	Listen(ctx context.Context, q Queue, handle Handler) error
+	Listen(ctx context.Context, q EventBus, handle Handler) error
 }
 
-type Listen func(ctx context.Context, q Queue, handle Handler) error
+type Listen func(ctx context.Context, q EventBus, handle Handler) error
 
-func (listen Listen) Listen(ctx context.Context, q Queue, handle Handler) error {
+func (listen Listen) Listen(ctx context.Context, q EventBus, handle Handler) error {
 	return listen(ctx, q, handle)
 }
 
@@ -221,7 +221,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 	}
 	completeListenConfig(&cfg)
 	buf := make(chan *Event, cfg.BufSize)
-	return Listen(func(ctx context.Context, q Queue, handler Handler) error {
+	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
 		errCh := make(chan error)
 		ctx, cancel := context.WithCancel(ctx)
 		go func() {
