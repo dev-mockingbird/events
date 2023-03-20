@@ -7,6 +7,8 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
+const kafkaTypeKey = "__type__"
+
 type kafkaQueue struct {
 	config KafkaQueueConfig
 	w      *kafka.Writer
@@ -21,8 +23,32 @@ type KafkaQueueConfig struct {
 	ConsumerName string
 }
 
-func KafkaQueue(config KafkaQueueConfig) EventQueue {
-	return &kafkaQueue{config: config}
+type KafkaQueueOption func(config *KafkaQueueConfig)
+
+func KafkaBrokers(brokers ...string) KafkaQueueOption {
+	return func(config *KafkaQueueConfig) {
+		config.Brokers = brokers
+	}
+}
+
+func KafkaTopic(topic string) KafkaQueueOption {
+	return func(config *KafkaQueueConfig) {
+		config.Topic = topic
+	}
+}
+
+func KafkaConsumerName(name string) KafkaQueueOption {
+	return func(config *KafkaQueueConfig) {
+		config.ConsumerName = name
+	}
+}
+
+func KafkaQueue(opts ...KafkaQueueOption) Queue {
+	q := kafkaQueue{}
+	for _, opt := range opts {
+		opt(&q.config)
+	}
+	return &q
 }
 
 func (q *kafkaQueue) Name() string {
@@ -38,13 +64,16 @@ func (q *kafkaQueue) Add(ctx context.Context, e *Event) (err error) {
 	})
 	msg := kafka.Message{
 		Key:     []byte(e.ID),
-		Value:   e.Data,
+		Value:   e.Payload,
 		Headers: make([]kafka.Header, len(e.Metadata)+1),
 	}
-	msg.Headers[0] = kafka.Header{Key: "__type__", Value: []byte(e.Type)}
+	msg.Headers[0] = kafka.Header{Key: kafkaTypeKey, Value: []byte(e.Type)}
 	var i int = 1
 	for k, v := range e.Metadata {
 		msg.Headers[i] = kafka.Header{Key: k, Value: []byte(v)}
+	}
+	if err := e.PackPayload(); err != nil {
+		return err
 	}
 	if err := q.w.WriteMessages(ctx, msg); err != nil {
 		return err
@@ -68,14 +97,14 @@ func (q *kafkaQueue) Next(ctx context.Context, e *Event) (err error) {
 	for _, h := range msg.Headers {
 		val := make([]byte, len(h.Value))
 		copy(val, h.Value)
-		if h.Key == "__type__" {
+		if h.Key == kafkaTypeKey {
 			e.Type = string(val)
 			continue
 		}
 		e.Metadata[h.Key] = string(val)
 	}
-	e.Data = make([]byte, len(msg.Value))
-	copy(e.Data, msg.Value)
+	e.Payload = make([]byte, len(msg.Value))
+	copy(e.Payload, msg.Value)
 	key := make([]byte, len(msg.Key))
 	copy(key, msg.Key)
 	e.ID = string(key)

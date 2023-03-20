@@ -2,8 +2,6 @@ package events
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 	"sync"
 	"testing"
 )
@@ -17,7 +15,7 @@ func TestMemoryQueue(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 10; i++ {
 			total += i
-			q.Add(context.Background(), NewEvent("test", []byte(fmt.Sprintf("%d", i))))
+			q.Add(context.Background(), New("test", Json(i)))
 		}
 	}()
 	var ct int
@@ -29,7 +27,10 @@ func TestMemoryQueue(t *testing.T) {
 			if err = q.Next(context.Background(), &e); err != nil {
 				return
 			}
-			i, _ := strconv.Atoi(string(e.Data))
+			var i int
+			if err = e.UnpackPayload(&i); err != nil {
+				return
+			}
 			ct += i
 			if ct >= total {
 				break

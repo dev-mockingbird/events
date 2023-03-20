@@ -2,9 +2,7 @@ package events
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -25,14 +23,17 @@ func TestDefaultListener(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 10; i++ {
 			total += i
-			q.Add(context.Background(), NewEvent("test", []byte(fmt.Sprintf("%d", i))))
+			q.Add(context.Background(), New("test", Json(i)))
 		}
 	}()
 	var ct int
 	go func() {
 		defer wg.Done()
-		listener.Listen(context.Background(), q, HandleEvent(func(ctx context.Context, e *Event) error {
-			i, _ := strconv.Atoi(string(e.Data))
+		listener.Listen(context.Background(), q, Handle(func(ctx context.Context, e *Event) error {
+			var i int
+			if err := e.UnpackPayload(&i); err != nil {
+				return err
+			}
 			ct += i
 			if ct >= total {
 				return ListenComplete

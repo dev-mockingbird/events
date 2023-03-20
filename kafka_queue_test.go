@@ -3,9 +3,7 @@ package events
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -18,16 +16,12 @@ func TestKafkaQueue(t *testing.T) {
 		return
 	}
 	brokers := strings.Split(broker, ",")
-	q := KafkaQueue(KafkaQueueConfig{
-		Brokers:      brokers,
-		Topic:        topic,
-		ConsumerName: "test",
-	})
+	q := KafkaQueue(KafkaBrokers(brokers...), KafkaTopic(topic), KafkaConsumerName("test"))
 	ctx := context.Background()
 	var total int
 	for i := 0; i < 10; i++ {
 		total += i
-		if err := q.Add(ctx, NewEvent("test", []byte(fmt.Sprintf("%d", i)))); err != nil {
+		if err := q.Add(ctx, New("test", Json(i))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -46,7 +40,10 @@ func TestKafkaQueue(t *testing.T) {
 			err = errors.New("type empty")
 			break
 		}
-		i, _ := strconv.Atoi(string(e.Data))
+		var i int
+		if err = e.UnpackPayload(&i); err != nil {
+			break
+		}
 		rt += i
 		if rt >= total {
 			break
