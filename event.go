@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,6 +28,16 @@ var (
 	NoEncodingHint      = errors.New("no encoding hint presence in metadata")
 	UnsupportedEncoding = func(hint string) error {
 		return fmt.Errorf("unsupported encoding hint: %s", hint)
+	}
+	LogHandler = func(lgr logf.Logfer) Handler {
+		return Handle(func(ctx context.Context, e *Event) error {
+			bs, err := json.Marshal(e)
+			if err != nil {
+				return err
+			}
+			lgr.Logf(logger.InfoLevel, "received event: %s", bs)
+			return nil
+		})
 	}
 )
 
@@ -223,6 +234,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 	buf := make(chan *Event, cfg.BufSize)
 	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
 		errCh := make(chan error)
+		defer close(errCh)
 		ctx, cancel := context.WithCancel(ctx)
 		go func() {
 			for {
@@ -231,7 +243,6 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 					if err := handler.Handle(ctx, e); err != nil {
 						if errors.Is(err, ListenComplete) {
 							errCh <- nil
-							close(errCh)
 							cancel()
 							return
 						}
@@ -256,7 +267,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 					for {
 						if err := q.Next(ctx, &e); err != nil {
 							cfg.Logger.Logf(logger.ErrorLevel, "read next from queue[%s](retry %d): %s", q.Name(), retry, err.Error())
-							if !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err) {
+							if !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err) {
 								retry++
 								continue
 							}

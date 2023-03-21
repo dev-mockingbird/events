@@ -2,11 +2,13 @@ package events
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/dev-mockingbird/logf"
 	"github.com/golang/mock/gomock"
 )
 
@@ -15,7 +17,7 @@ func TestDefaultListener(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	listener := DefaultListener(BufSize(10))
-	q := MemoryEventBus(10)
+	q := MemoryEventBus("test", 10)
 	var total int
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -44,5 +46,21 @@ func TestDefaultListener(t *testing.T) {
 	wg.Wait()
 	if ct != total {
 		t.Fatal("listen failed")
+	}
+}
+
+func TestDefaultListenerCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	q := MemoryEventBus("test", 10)
+	ch := make(chan error)
+	go func() {
+		err := DefaultListener().Listen(ctx, q, LogHandler(logf.New()))
+		ch <- err
+	}()
+	time.Sleep(time.Second)
+	cancel()
+	err := <-ch
+	if !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
 	}
 }
