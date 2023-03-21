@@ -2,7 +2,6 @@ package events
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"sync"
 	"testing"
@@ -60,7 +59,7 @@ func TestDefaultListenerCancel(t *testing.T) {
 	time.Sleep(time.Second)
 	cancel()
 	err := <-ch
-	if !errors.Is(err, context.Canceled) {
+	if err != nil {
 		t.Fatal(err)
 	}
 }

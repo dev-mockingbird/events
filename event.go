@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/dev-mockingbird/logf"
@@ -233,23 +234,31 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 	completeListenConfig(&cfg)
 	buf := make(chan *Event, cfg.BufSize)
 	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
-		errCh := make(chan error)
+		errCh := make(chan error, 2)
 		defer close(errCh)
 		ctx, cancel := context.WithCancel(ctx)
+		var wg sync.WaitGroup
+		wg.Add(2)
 		go func() {
+			defer wg.Done()
 			for {
 				select {
 				case e := <-buf:
 					if err := handler.Handle(ctx, e); err != nil {
-						if errors.Is(err, ListenComplete) {
+						switch {
+						case errors.Is(err, context.Canceled):
+							errCh <- nil
+							return
+						case errors.Is(err, ListenComplete):
 							errCh <- nil
 							cancel()
 							return
+						default:
+							cfg.Logger.Logf(logger.ErrorLevel, "handle event: %s", err.Error())
+							errCh <- err
+							cancel()
+							return
 						}
-						cfg.Logger.Logf(logger.ErrorLevel, "handle event: %s", err.Error())
-						errCh <- err
-						cancel()
-						return
 					}
 				case <-ctx.Done():
 					return
@@ -257,6 +266,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 			}
 		}()
 		go func() {
+			defer wg.Done()
 			for {
 				select {
 				case <-ctx.Done():
@@ -266,8 +276,12 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 					retry := 0
 					for {
 						if err := q.Next(ctx, &e); err != nil {
-							cfg.Logger.Logf(logger.ErrorLevel, "read next from queue[%s](retry %d): %s", q.Name(), retry, err.Error())
-							if !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err) {
+							switch {
+							case errors.Is(err, context.Canceled):
+								errCh <- nil
+								return
+							case !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err):
+								cfg.Logger.Logf(logger.ErrorLevel, "read next from queue[%s](retry %d): %s", q.Name(), retry, err.Error())
 								retry++
 								continue
 							}
@@ -282,6 +296,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 				}
 			}
 		}()
+		wg.Wait()
 		return <-errCh
 	})
 }
