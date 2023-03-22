@@ -67,3 +67,39 @@ func TestMemoryBusCancel(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestMemoryBus_MoreConsumer(t *testing.T) {
+	ctx := context.Background()
+	errCh := make(chan error, 10)
+	var wg sync.WaitGroup
+	wg.Add(10)
+	var total int
+	var lock sync.Mutex
+	for i := 0; i < 10; i++ {
+		q := MemoryEventBus("test", 10)
+		go func(q EventBus) {
+			defer wg.Done()
+			var e Event
+			if err := q.Next(ctx, &e); err != nil {
+				errCh <- err
+				return
+			}
+			var i int
+			if err := e.UnpackPayload(&i); err != nil {
+				t.Logf("err: %s", err.Error())
+				return
+			}
+			lock.Lock()
+			total += i
+			lock.Unlock()
+		}(q)
+	}
+	q := MemoryEventBus("test", 10)
+	if err := q.Add(ctx, New("test", Json(1))); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
+	if total != 10 {
+		t.Fatal("more consumer failed")
+	}
+}

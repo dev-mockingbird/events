@@ -2,49 +2,100 @@ package events
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"sync"
 )
 
 var memoryEventBusChans map[string]*chan Event
+var memoryEventBuses map[string]map[uint32]*memorybus
 var memoryEventBusChanslock sync.RWMutex
+var memoryEventBuseslock sync.RWMutex
 
 func init() {
 	memoryEventBusChans = make(map[string]*chan Event)
+	memoryEventBuses = make(map[string]map[uint32]*memorybus)
 }
 
 type memorybus struct {
+	id      uuid.UUID
 	name    string
+	local   *chan Event
 	bufSize int
 }
 
-func initChan(m memorybus) {
+func initEventBus(m *memorybus) {
+	initEventbusGlobalChan(m)
+	initGlobalMemorybuses(m)
+}
+
+func reinitEventbusGlolalChan(m *memorybus) {
+	if _, ok := memoryEventBusChans[m.name]; !ok {
+		close(*memoryEventBusChans[m.name])
+	}
+	initEventbusGlobalChan(m)
+}
+
+func initEventbusGlobalChan(m *memorybus) {
 	memoryEventBusChanslock.Lock()
 	defer memoryEventBusChanslock.Unlock()
-	if ch, ok := memoryEventBusChans[m.name]; ok {
-		close(*ch)
+	if _, ok := memoryEventBusChans[m.name]; !ok {
+		ch := make(chan Event, 100)
+		memoryEventBusChans[m.name] = &ch
+		go func(ch *chan Event) {
+			for {
+				e, ok := <-*ch
+				if !ok {
+					return
+				}
+				memoryEventBuseslock.Lock()
+				for n, bus := range memoryEventBuses[m.name] {
+					go func(ch *chan Event, e Event, n uint32) {
+						*ch <- e
+					}(bus.local, e, n)
+				}
+				memoryEventBuseslock.Unlock()
+			}
+		}(memoryEventBusChans[m.name])
 	}
-	ch := make(chan Event, m.bufSize)
-	memoryEventBusChans[m.name] = &ch
+}
+
+func initGlobalMemorybuses(m *memorybus) {
+	memoryEventBuseslock.Lock()
+	defer memoryEventBuseslock.Unlock()
+	if _, ok := memoryEventBuses[m.name]; !ok {
+		memoryEventBuses[m.name] = make(map[uint32]*memorybus)
+	}
+	if _, ok := memoryEventBuses[m.name][m.id.ID()]; !ok {
+		memoryEventBuses[m.name][m.id.ID()] = m
+	}
 }
 
 func MemoryEventBus(name string, bufSize int) EventBus {
 	name = "memory-" + name
-	b := memorybus{name: name, bufSize: bufSize}
-	initChan(b)
+	ch := make(chan Event)
+	b := memorybus{
+		name:    name,
+		bufSize: bufSize,
+		local:   &ch,
+		id:      uuid.New(),
+	}
+	initEventBus(&b)
 	return &b
 }
 
-func (q memorybus) Name() string {
-	return q.name
+func (q *memorybus) Name() string {
+	return q.id.String()
 }
 
-func (q memorybus) Add(ctx context.Context, e *Event) error {
+func (q *memorybus) Add(ctx context.Context, e *Event) error {
 	if err := e.PackPayload(); err != nil {
 		return err
 	}
 	ch := make(chan struct{})
 	go func() {
+		memoryEventBusChanslock.RLock()
 		*memoryEventBusChans[q.name] <- *e
+		memoryEventBusChanslock.RUnlock()
 		ch <- struct{}{}
 	}()
 	done := make(chan struct{})
@@ -56,7 +107,10 @@ func (q memorybus) Add(ctx context.Context, e *Event) error {
 				close(done)
 				return
 			case <-ctx.Done():
-				initChan(q)
+				reinitEventbusGlolalChan(q)
+				close(*q.local)
+				ch := make(chan Event)
+				q.local = &ch
 				err = ctx.Err()
 			}
 		}
@@ -66,10 +120,10 @@ func (q memorybus) Add(ctx context.Context, e *Event) error {
 	return err
 }
 
-func (q memorybus) Next(ctx context.Context, e *Event) error {
+func (q *memorybus) Next(ctx context.Context, e *Event) error {
 	ch := make(chan struct{})
 	go func() {
-		*e = <-*memoryEventBusChans[q.name]
+		*e = <-*q.local
 		ch <- struct{}{}
 	}()
 	done := make(chan struct{})
@@ -81,7 +135,10 @@ func (q memorybus) Next(ctx context.Context, e *Event) error {
 				close(done)
 				return
 			case <-ctx.Done():
-				initChan(q)
+				reinitEventbusGlolalChan(q)
+				close(*q.local)
+				ch := make(chan Event)
+				q.local = &ch
 				err = ctx.Err()
 			}
 		}

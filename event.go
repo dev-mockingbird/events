@@ -138,6 +138,12 @@ type EventBus interface {
 	Next(ctx context.Context, e *Event) error
 }
 
+// Closer
+type Closer interface {
+	// Close
+	Close() error
+}
+
 // Handler, event handler
 type Handler interface {
 	// Handle, handle the event. if the method returns an error, the listener should quit listen with the error.
