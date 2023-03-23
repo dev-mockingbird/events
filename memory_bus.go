@@ -2,8 +2,9 @@ package events
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 var memoryEventBusChans map[string]*chan Event
@@ -146,4 +147,22 @@ func (q *memorybus) Next(ctx context.Context, e *Event) error {
 	<-ch
 	done <- struct{}{}
 	return err
+}
+
+func (q *memorybus) Close() error {
+	memoryEventBuseslock.Lock()
+	if buses, ok := memoryEventBuses[q.name]; ok {
+		delete(buses, q.id.ID())
+		close(*q.local)
+	}
+	hasbuses := len(memoryEventBuses[q.name]) > 0
+	memoryEventBuseslock.Unlock()
+	if !hasbuses {
+		return nil
+	}
+	memoryEventBusChanslock.Lock()
+	close(*memoryEventBusChans[q.name])
+	delete(memoryEventBusChans, q.name)
+	memoryEventBusChanslock.Unlock()
+	return nil
 }

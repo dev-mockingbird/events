@@ -103,3 +103,22 @@ func TestMemoryBus_MoreConsumer(t *testing.T) {
 		t.Fatal("more consumer failed")
 	}
 }
+
+func TestMemoryBus_Close(t *testing.T) {
+	q := MemoryEventBus("test", 10)
+	errCh := make(chan error)
+	go func() {
+		var e Event
+		if err := q.Next(context.Background(), &e); err != nil {
+			errCh <- err
+			return
+		}
+		errCh <- nil
+	}()
+	if err := q.(Closer).Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+}
