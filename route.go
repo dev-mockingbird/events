@@ -9,16 +9,23 @@ var (
 	ErrUnsupportedEventType = errors.New("unsuppored event typee")
 )
 
+type Router interface {
+	Handler
+	On(typ string, h Handler) Router
+}
+
 type router struct {
 	records map[string]Handler
 }
 
-func On(typ string, h Handler) *router {
+var _ Router = &router{}
+
+func On(typ string, h Handler) Router {
 	r := router{records: make(map[string]Handler)}
 	return r.On(typ, h)
 }
 
-func (r *router) On(typ string, h Handler) *router {
+func (r *router) On(typ string, h Handler) Router {
 	r.records[typ] = h
 	return r
 }
