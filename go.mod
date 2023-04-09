@@ -3,7 +3,7 @@ module github.com/dev-mockingbird/events
 go 1.18
 
 require (
-	github.com/dev-mockingbird/logf v0.0.0-20230319040451-51563f0d64da
+	github.com/dev-mockingbird/logf v0.0.3
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
 	github.com/segmentio/kafka-go v0.4.39

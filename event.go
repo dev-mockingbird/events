@@ -11,7 +11,6 @@ import (
 
 	"github.com/dev-mockingbird/logf"
 	"github.com/google/uuid"
-	"go-micro.dev/v4/logger"
 )
 
 const (
@@ -36,7 +35,7 @@ var (
 			if err != nil {
 				return err
 			}
-			lgr.Logf(logger.InfoLevel, "received event: %s", bs)
+			lgr.Logf(logf.Info, "received event: %s", bs)
 			return nil
 		})
 	}
@@ -253,14 +252,16 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 					if err := handler.Handle(ctx, e); err != nil {
 						switch {
 						case errors.Is(err, context.Canceled):
+							cfg.Logger.Logf(logf.Warn, "context canceled the listening")
 							errCh <- nil
 							return
 						case errors.Is(err, ListenComplete):
+							cfg.Logger.Logf(logf.Info, "context canceled the listening")
 							errCh <- nil
 							cancel()
 							return
 						default:
-							cfg.Logger.Logf(logger.ErrorLevel, "handle event: %s", err.Error())
+							cfg.Logger.Logf(logf.Error, "handle event: %s", err.Error())
 							errCh <- err
 							cancel()
 							return
@@ -284,13 +285,15 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 						if err := q.Next(ctx, &e); err != nil {
 							switch {
 							case errors.Is(err, context.Canceled):
+								cfg.Logger.Logf(logf.Warn, "context canceled listening")
 								errCh <- nil
 								return
 							case !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err):
-								cfg.Logger.Logf(logger.ErrorLevel, "read next from queue[%s](retry %d): %s", q.Name(), retry, err.Error())
+								cfg.Logger.Logf(logf.Error, "read next from queue[%s](retry %d): %s", q.Name(), retry, err.Error())
 								retry++
 								continue
 							}
+							cfg.Logger.Logf(logf.Error, "read next from event bus: %s", err.Error())
 							errCh <- err
 							cancel()
 							return
@@ -298,7 +301,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 						break
 					}
 					buf <- &e
-					cfg.Logger.Logf(logger.DebugLevel, "read from queue [%s]: %v", q.Name(), e)
+					cfg.Logger.Logf(logf.Info, "read from queue [%s]: %#v", q.Name(), e)
 				}
 			}
 		}()
