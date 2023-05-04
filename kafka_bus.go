@@ -62,6 +62,9 @@ func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
 			Topic: q.config.Topic,
 		}
 	})
+	if err := e.PackPayload(); err != nil {
+		return err
+	}
 	msg := kafka.Message{
 		Key:     []byte(e.ID),
 		Value:   e.Payload,
@@ -71,9 +74,6 @@ func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
 	var i int = 1
 	for k, v := range e.Metadata {
 		msg.Headers[i] = kafka.Header{Key: k, Value: []byte(v)}
-	}
-	if err := e.PackPayload(); err != nil {
-		return err
 	}
 	if err := q.w.WriteMessages(ctx, msg); err != nil {
 		return err
