@@ -94,6 +94,7 @@ func TestMemoryBus_MoreConsumer(t *testing.T) {
 			lock.Unlock()
 		}(q)
 	}
+	time.Sleep(time.Second)
 	q := MemoryEventBus("test", 10)
 	if err := q.Add(ctx, New("test", Json(1))); err != nil {
 		t.Fatal(err)
