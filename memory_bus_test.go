@@ -72,11 +72,11 @@ func TestMemoryBus_MoreConsumer(t *testing.T) {
 	ctx := context.Background()
 	errCh := make(chan error, 10)
 	var wg sync.WaitGroup
-	wg.Add(10)
 	var total int
 	var lock sync.Mutex
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		q := MemoryEventBus("test", 10)
+		wg.Add(1)
 		go func(q EventBus) {
 			defer wg.Done()
 			var e Event
@@ -94,13 +94,12 @@ func TestMemoryBus_MoreConsumer(t *testing.T) {
 			lock.Unlock()
 		}(q)
 	}
-	time.Sleep(time.Second)
 	q := MemoryEventBus("test", 10)
 	if err := q.Add(ctx, New("test", Json(1))); err != nil {
 		t.Fatal(err)
 	}
 	wg.Wait()
-	if total != 10 {
+	if total != 100 {
 		t.Fatal("more consumer failed")
 	}
 }

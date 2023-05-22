@@ -122,7 +122,7 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 	if err := e.PackPayload(); err != nil {
 		return err
 	}
-	ch := make(chan struct{})
+	ch := make(chan struct{}, 1)
 	go func() {
 		*q.memorybus.ch <- *e
 		ch <- struct{}{}
@@ -136,7 +136,7 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 }
 
 func (q *memorybusEntry) Next(ctx context.Context, e *Event) error {
-	ch := make(chan struct{})
+	ch := make(chan struct{}, 1)
 	go func() {
 		*e = <-*q.ch
 		ch <- struct{}{}
