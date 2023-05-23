@@ -39,6 +39,11 @@ var (
 			return nil
 		})
 	}
+	eventPool = sync.Pool{
+		New: func() interface{} {
+			return &Event{}
+		},
+	}
 )
 
 const (
@@ -69,20 +74,27 @@ type Event struct {
 
 // New an event, it should use with With method to set the encoding-hint if payload emerged
 // example:
-//  events.New("test", []byte("{\"name\": \"\hello\"}")).With(events.EncodingHint, EncodingJson)
+//
+//	events.New("test", []byte("{\"name\": \"\hello\"}")).With(events.EncodingHint, EncodingJson)
 func New(typ string, payloads ...Payloader) *Event {
-	return &Event{
-		ID:        uuid.New().String(),
-		Type:      typ,
-		Metadata:  make(map[string]string),
-		CreatedAt: time.Now(),
-		payloader: func() Payloader {
-			if len(payloads) > 0 {
-				return payloads[0]
-			}
-			return nil
-		}(),
-	}
+	e := eventPool.Get().(*Event)
+	e.ID = uuid.New().String()
+	e.Type = typ
+	e.Metadata = make(map[string]string)
+	e.CreatedAt = time.Now()
+	e.Payload = nil
+	e.payloader = func() Payloader {
+		if len(payloads) > 0 {
+			return payloads[0]
+		}
+		return nil
+	}()
+	e.payloadPacked = false
+	return e
+}
+
+func Put(e *Event) {
+	eventPool.Put(e)
 }
 
 // With, set the metadata of an event
@@ -152,7 +164,8 @@ type Handler interface {
 
 // Handle, an sophisticated Handler which transforms a function to a handler
 // example:
-//  events.Handle(func(context.Background(), e *Event) error { return nil })
+//
+//	events.Handle(func(context.Background(), e *Event) error { return nil })
 type Handle func(ctx context.Context, e *Event) error
 
 // Handle implement the Handler
@@ -237,75 +250,56 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 		opt(&cfg)
 	}
 	completeListenConfig(&cfg)
-	buf := make(chan *Event, cfg.BufSize)
 	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
 		errCh := make(chan error, 2)
 		defer close(errCh)
-		ctx, cancel := context.WithCancel(ctx)
-		var wg sync.WaitGroup
-		wg.Add(2)
 		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case e := <-buf:
-					if err := handler.Handle(ctx, e); err != nil {
-						switch {
-						case errors.Is(err, context.Canceled):
-							cfg.Logger.Logf(logf.Warn, "context canceled the listening")
-							errCh <- nil
-							return
-						case errors.Is(err, ListenComplete):
-							cfg.Logger.Logf(logf.Info, "context canceled the listening")
-							errCh <- nil
-							cancel()
-							return
-						default:
-							cfg.Logger.Logf(logf.Error, "handle event: %s", err.Error())
-							errCh <- err
-							cancel()
-							return
-						}
-					}
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-		go func() {
-			defer wg.Done()
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				default:
-					var e Event
-					retry := 0
-					for {
-						if err := q.Next(ctx, &e); err != nil {
-							switch {
-							case errors.Is(err, context.Canceled):
-								cfg.Logger.Logf(logf.Warn, "context canceled listening")
-								errCh <- nil
-								return
-							case !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err):
-								cfg.Logger.Logf(logf.Error, "read next from queue[%s](retry %d): %s", q.Name(), retry, err.Error())
-								retry++
-								continue
+					func() {
+						var e *Event
+						defer func() {
+							if e != nil {
+								Put(e)
 							}
-							cfg.Logger.Logf(logf.Error, "read next from event bus: %s", err.Error())
-							errCh <- err
-							cancel()
-							return
+						}()
+						retry := 0
+						for {
+							e = New("")
+							if err := q.Next(ctx, e); err != nil {
+								switch {
+								case errors.Is(err, context.Canceled):
+									cfg.Logger.Logf(logf.Warn, "context canceled listening")
+									errCh <- nil
+									return
+								case !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err):
+									cfg.Logger.Logf(logf.Error, "read next from queue[%s](retry %d): %s", q.Name(), retry, err.Error())
+									retry++
+									continue
+								}
+								cfg.Logger.Logf(logf.Error, "read next from event bus: %s", err.Error())
+								errCh <- err
+								return
+							}
+							break
 						}
-						break
-					}
-					buf <- &e
-					cfg.Logger.Logf(logf.Info, "read from queue [%s]: %#v", q.Name(), e)
+						cfg.Logger.Logf(logf.Info, "received message [%s: %s] queue [%s]", e.Type, e.ID, q.Name())
+						cfg.Logger.Logf(logf.Trace, " payload: %s", e.Payload)
+						if err := handler.Handle(ctx, e); err != nil {
+							if errors.Is(err, ListenComplete) {
+								errCh <- nil
+								cfg.Logger.Logf(logf.Info, "listen canceled by handler")
+								return
+							}
+							cfg.Logger.Logf(logf.Error, "%s: %s", e.Type, err.Error)
+						}
+					}()
 				}
 			}
 		}()
-		wg.Wait()
 		return <-errCh
 	})
 }
