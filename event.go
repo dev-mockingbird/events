@@ -51,6 +51,10 @@ const (
 	StopListen = "listen.stop"
 )
 
+func init() {
+
+}
+
 // Event the event representation definition
 type Event struct {
 	// ID event id, always a uuid, it will be auto generated when constructed by New
@@ -197,6 +201,7 @@ type DefaultListenerConfig struct {
 	BufSize int
 	// NextRetries if read next message failed, it should retry automatically NexRetries times
 	NextRetryStrategy NextRetryStrategy
+	Id                string
 	Logger            logf.Logfer
 }
 
@@ -235,6 +240,12 @@ func RetryAny(shoudRetry int, waitUnit time.Duration) NextRetryStrategy {
 	}
 }
 
+func Id(id string) DefaultListenerOption {
+	return func(cfg *DefaultListenerConfig) {
+		cfg.Id = id
+	}
+}
+
 // completeListenConfig set default configuration for default listener
 func completeListenConfig(cfg *DefaultListenerConfig) {
 	if cfg.BufSize <= 0 {
@@ -246,6 +257,9 @@ func completeListenConfig(cfg *DefaultListenerConfig) {
 	if cfg.Logger == nil {
 		cfg.Logger = logf.New(logf.LogLevel(logf.Info))
 	}
+	if cfg.Id == "" {
+		cfg.Id = uuid.NewString()
+	}
 }
 
 // DefaultListener return a default listener
@@ -256,10 +270,10 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 	}
 	completeListenConfig(&cfg)
 	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
-		listenerId := uuid.NewString()
 		if reg, ok := q.(ListenerRegisterer); ok {
-			reg.RegisterListener(listenerId)
-			defer reg.UnregisterListener(listenerId)
+			fmt.Printf("listen: %s\n", cfg.Id)
+			reg.RegisterListener(cfg.Id)
+			defer reg.UnregisterListener(cfg.Id)
 		}
 		for {
 			select {
@@ -276,7 +290,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 					retry := 0
 					for {
 						e = New("")
-						if err := q.Next(ctx, e, listenerId); err != nil {
+						if err := q.Next(ctx, e, cfg.Id); err != nil {
 							switch {
 							case errors.Is(err, context.Canceled):
 								cfg.Logger.Logf(logf.Warn, "context canceled listening")

@@ -3,10 +3,40 @@ package events
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 )
+
+func TestMemoryEventBus_moreListener(t *testing.T) {
+	q := MemoryEventBus("test", 10)
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	total := 0
+	result := 0
+	var lock sync.Mutex
+	for i := 0; i < 10; i++ {
+		total += i
+		wg.Add(1)
+		go func(id int) {
+			DefaultListener(Id(fmt.Sprintf("%d", id))).Listen(ctx, q, Handle(func(ctx context.Context, e *Event) error {
+				lock.Lock()
+				result += id
+				lock.Unlock()
+				fmt.Printf("listener: %d. received: %s\n", id, e.Type)
+				wg.Done()
+				return ListenComplete
+			}))
+		}(i)
+	}
+	time.Sleep(time.Second)
+	q.Add(ctx, New("test"))
+	wg.Wait()
+	if total != result {
+		t.Fatal("error")
+	}
+}
 
 func TestMemoryEventBus(t *testing.T) {
 	q := MemoryEventBus("test", 10)

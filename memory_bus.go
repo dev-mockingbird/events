@@ -145,9 +145,9 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 
 func (q *memorybusEntry) RegisterListener(id string) {
 	q.lock.Lock()
-	defer q.lock.Unlock()
 	ch := make(chan Event)
 	q.listeners[id] = &ch
+	q.lock.Unlock()
 }
 
 func (q *memorybusEntry) UnregisterListener(id string) {
@@ -162,12 +162,12 @@ func (q *memorybusEntry) UnregisterListener(id string) {
 func (q *memorybusEntry) Next(ctx context.Context, e *Event, listenerId ...string) error {
 	ch := make(chan struct{}, 1)
 	go func() {
-		q.lock.RLock()
-		defer q.lock.RUnlock()
 		if len(listenerId) == 0 {
 			panic("no listener id found")
 		}
+		q.lock.RLock()
 		lch, ok := q.listeners[listenerId[0]]
+		q.lock.RUnlock()
 		if !ok {
 			panic("no listener found")
 		}

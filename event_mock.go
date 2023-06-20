@@ -63,17 +63,106 @@ func (mr *MockEventBusMockRecorder) Name() *gomock.Call {
 }
 
 // Next mocks base method.
-func (m *MockEventBus) Next(ctx context.Context, e *Event) error {
+func (m *MockEventBus) Next(ctx context.Context, e *Event, listenerId ...string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Next", ctx, e)
+	varargs := []interface{}{ctx, e}
+	for _, a := range listenerId {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Next", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Next indicates an expected call of Next.
-func (mr *MockEventBusMockRecorder) Next(ctx, e interface{}) *gomock.Call {
+func (mr *MockEventBusMockRecorder) Next(ctx, e interface{}, listenerId ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockEventBus)(nil).Next), ctx, e)
+	varargs := append([]interface{}{ctx, e}, listenerId...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockEventBus)(nil).Next), varargs...)
+}
+
+// MockListenerRegisterer is a mock of ListenerRegisterer interface.
+type MockListenerRegisterer struct {
+	ctrl     *gomock.Controller
+	recorder *MockListenerRegistererMockRecorder
+}
+
+// MockListenerRegistererMockRecorder is the mock recorder for MockListenerRegisterer.
+type MockListenerRegistererMockRecorder struct {
+	mock *MockListenerRegisterer
+}
+
+// NewMockListenerRegisterer creates a new mock instance.
+func NewMockListenerRegisterer(ctrl *gomock.Controller) *MockListenerRegisterer {
+	mock := &MockListenerRegisterer{ctrl: ctrl}
+	mock.recorder = &MockListenerRegistererMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockListenerRegisterer) EXPECT() *MockListenerRegistererMockRecorder {
+	return m.recorder
+}
+
+// RegisterListener mocks base method.
+func (m *MockListenerRegisterer) RegisterListener(id string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterListener", id)
+}
+
+// RegisterListener indicates an expected call of RegisterListener.
+func (mr *MockListenerRegistererMockRecorder) RegisterListener(id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterListener", reflect.TypeOf((*MockListenerRegisterer)(nil).RegisterListener), id)
+}
+
+// UnregisterListener mocks base method.
+func (m *MockListenerRegisterer) UnregisterListener(id string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UnregisterListener", id)
+}
+
+// UnregisterListener indicates an expected call of UnregisterListener.
+func (mr *MockListenerRegistererMockRecorder) UnregisterListener(id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterListener", reflect.TypeOf((*MockListenerRegisterer)(nil).UnregisterListener), id)
+}
+
+// MockCloser is a mock of Closer interface.
+type MockCloser struct {
+	ctrl     *gomock.Controller
+	recorder *MockCloserMockRecorder
+}
+
+// MockCloserMockRecorder is the mock recorder for MockCloser.
+type MockCloserMockRecorder struct {
+	mock *MockCloser
+}
+
+// NewMockCloser creates a new mock instance.
+func NewMockCloser(ctrl *gomock.Controller) *MockCloser {
+	mock := &MockCloser{ctrl: ctrl}
+	mock.recorder = &MockCloserMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockCloser) EXPECT() *MockCloserMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockCloser) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockCloserMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockCloser)(nil).Close))
 }
 
 // MockHandler is a mock of Handler interface.
