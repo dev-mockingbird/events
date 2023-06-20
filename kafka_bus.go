@@ -81,7 +81,7 @@ func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
 	return nil
 }
 
-func (q *kafkabus) Next(ctx context.Context, e *Event) (err error) {
+func (q *kafkabus) Next(ctx context.Context, e *Event, listenerId ...string) (err error) {
 	q.rOnce.Do(func() {
 		q.r = kafka.NewReader(kafka.ReaderConfig{
 			Brokers: q.config.Brokers,

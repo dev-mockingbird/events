@@ -146,7 +146,12 @@ type EventBus interface {
 	// Add, push event to the queue
 	Add(ctx context.Context, e *Event) error
 	// Next, grab next event from queue
-	Next(ctx context.Context, e *Event) error
+	Next(ctx context.Context, e *Event, listenerId ...string) error
+}
+
+type ListenerRegisterer interface {
+	RegisterListener(id string)
+	UnregisterListener(id string)
 }
 
 // Closer
@@ -251,6 +256,11 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 	}
 	completeListenConfig(&cfg)
 	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
+		listenerId := uuid.NewString()
+		if reg, ok := q.(ListenerRegisterer); ok {
+			reg.RegisterListener(listenerId)
+			defer reg.UnregisterListener(listenerId)
+		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -266,7 +276,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 					retry := 0
 					for {
 						e = New("")
-						if err := q.Next(ctx, e); err != nil {
+						if err := q.Next(ctx, e, listenerId); err != nil {
 							switch {
 							case errors.Is(err, context.Canceled):
 								cfg.Logger.Logf(logf.Warn, "context canceled listening")

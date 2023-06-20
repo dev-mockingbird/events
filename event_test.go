@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"sync"
 	"testing"
@@ -51,15 +52,15 @@ func TestDefaultListener(t *testing.T) {
 func TestDefaultListenerCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	q := MemoryEventBus("test", 10)
-	ch := make(chan error)
+	ch := make(chan error, 1)
 	go func() {
 		err := DefaultListener().Listen(ctx, q, LogHandler(logf.New()))
 		ch <- err
 	}()
-	time.Sleep(time.Second)
 	cancel()
+	time.Sleep(time.Second)
 	err := <-ch
-	if err != nil {
+	if !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 }

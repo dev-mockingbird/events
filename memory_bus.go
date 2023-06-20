@@ -32,7 +32,11 @@ func (m *memorybusManager) del(name string) {
 		return
 	}
 	for _, entry := range bus.entries {
-		close(*entry.ch)
+		entry.lock.Lock()
+		for _, listener := range entry.listeners {
+			close(*listener)
+		}
+		entry.lock.Unlock()
 	}
 	bus.stoppedlock.Lock()
 	bus.stopped = true
@@ -58,7 +62,8 @@ type memorybus struct {
 
 type memorybusEntry struct {
 	id        uuid.UUID
-	ch        *chan Event
+	listeners map[string]*chan Event
+	lock      sync.RWMutex
 	memorybus *memorybus
 }
 
@@ -74,7 +79,11 @@ func (m *memorybus) start() {
 			}
 			for _, entry := range m.entries {
 				go func(entry *memorybusEntry) {
-					*entry.ch <- e
+					entry.lock.RLock()
+					defer entry.lock.RUnlock()
+					for _, listener := range entry.listeners {
+						*listener <- e
+					}
 				}(entry)
 			}
 		}
@@ -82,10 +91,9 @@ func (m *memorybus) start() {
 }
 
 func newMemorybusEntry(bus *memorybus, bufSize int) *memorybusEntry {
-	ch := make(chan Event, bufSize)
 	return &memorybusEntry{
 		id:        uuid.New(),
-		ch:        &ch,
+		listeners: make(map[string]*chan Event),
 		memorybus: bus,
 	}
 }
@@ -135,10 +143,35 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 	}
 }
 
-func (q *memorybusEntry) Next(ctx context.Context, e *Event) error {
+func (q *memorybusEntry) RegisterListener(id string) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	ch := make(chan Event)
+	q.listeners[id] = &ch
+}
+
+func (q *memorybusEntry) UnregisterListener(id string) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	if ch, ok := q.listeners[id]; ok {
+		close(*ch)
+	}
+	delete(q.listeners, id)
+}
+
+func (q *memorybusEntry) Next(ctx context.Context, e *Event, listenerId ...string) error {
 	ch := make(chan struct{}, 1)
 	go func() {
-		*e = <-*q.ch
+		q.lock.RLock()
+		defer q.lock.RUnlock()
+		if len(listenerId) == 0 {
+			panic("no listener id found")
+		}
+		lch, ok := q.listeners[listenerId[0]]
+		if !ok {
+			panic("no listener found")
+		}
+		*e = <-*lch
 		ch <- struct{}{}
 	}()
 	select {
@@ -152,9 +185,13 @@ func (q *memorybusEntry) Next(ctx context.Context, e *Event) error {
 func (q *memorybusEntry) Close() error {
 	q.memorybus.lock.Lock()
 	defer q.memorybus.lock.Unlock()
-	close(*q.ch)
 	for i := 0; i < len(q.memorybus.entries); i++ {
 		if q == q.memorybus.entries[i] {
+			q.lock.Lock()
+			for _, listener := range q.listeners {
+				close(*listener)
+			}
+			q.lock.Unlock()
 			q.memorybus.entries = append(q.memorybus.entries[:i], q.memorybus.entries[i+1:]...)
 		}
 	}
