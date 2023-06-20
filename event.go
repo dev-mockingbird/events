@@ -239,7 +239,7 @@ func completeListenConfig(cfg *DefaultListenerConfig) {
 		cfg.NextRetryStrategy = RetryAny(3, time.Second)
 	}
 	if cfg.Logger == nil {
-		cfg.Logger = logf.New()
+		cfg.Logger = logf.New(logf.LogLevel(logf.Info))
 	}
 }
 
@@ -251,55 +251,51 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 	}
 	completeListenConfig(&cfg)
 	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
-		errCh := make(chan error, 2)
-		defer close(errCh)
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					func() {
-						var e *Event
-						defer func() {
-							if e != nil {
-								Put(e)
-							}
-						}()
-						retry := 0
-						for {
-							e = New("")
-							if err := q.Next(ctx, e); err != nil {
-								switch {
-								case errors.Is(err, context.Canceled):
-									cfg.Logger.Logf(logf.Warn, "context canceled listening")
-									errCh <- nil
-									return
-								case !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err):
-									cfg.Logger.Logf(logf.Error, "read next from queue[%s](retry %d): %s", q.Name(), retry, err.Error())
-									retry++
-									continue
-								}
-								cfg.Logger.Logf(logf.Error, "read next from event bus: %s", err.Error())
-								errCh <- err
-								return
-							}
-							break
-						}
-						cfg.Logger.Logf(logf.Info, "received message [%s: %s] queue [%s]", e.Type, e.ID, q.Name())
-						cfg.Logger.Logf(logf.Trace, " payload: %s", e.Payload)
-						if err := handler.Handle(ctx, e); err != nil {
-							if errors.Is(err, ListenComplete) {
-								errCh <- nil
-								cfg.Logger.Logf(logf.Info, "listen canceled by handler")
-								return
-							}
-							cfg.Logger.Logf(logf.Error, "%s: %s", e.Type, err.Error)
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				done, err := func() (bool, error) {
+					var e *Event
+					defer func() {
+						if e != nil {
+							Put(e)
 						}
 					}()
+					retry := 0
+					for {
+						e = New("")
+						if err := q.Next(ctx, e); err != nil {
+							switch {
+							case errors.Is(err, context.Canceled):
+								cfg.Logger.Logf(logf.Warn, "context canceled listening")
+								return true, nil
+							case !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err):
+								cfg.Logger.Logf(logf.Error, "read next from queue[%s](retry %d): %s", q.Name(), retry, err.Error())
+								retry++
+								continue
+							}
+							cfg.Logger.Logf(logf.Error, "read next from event bus: %s", err.Error())
+							return true, err
+						}
+						break
+					}
+					cfg.Logger.Logf(logf.Trace, "received message [%s: %s] queue [%s]", e.Type, e.ID, q.Name())
+					cfg.Logger.Logf(logf.Trace, " payload: %s", e.Payload)
+					if err := handler.Handle(ctx, e); err != nil {
+						if errors.Is(err, ListenComplete) {
+							cfg.Logger.Logf(logf.Info, "listen canceled by handler")
+							return true, nil
+						}
+						cfg.Logger.Logf(logf.Error, "%s: %s", e.Type, err.Error)
+					}
+					return false, nil
+				}()
+				if done || err != nil {
+					return err
 				}
 			}
-		}()
-		return <-errCh
+		}
 	})
 }
