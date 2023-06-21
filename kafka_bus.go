@@ -37,7 +37,12 @@ func KafkaTopic(topic string) KafkaEventBusOption {
 	}
 }
 
+// Deprecated: KafkaConsumerName is deprecated, use KafkaConsumer instead
 func KafkaConsumerName(name string) KafkaEventBusOption {
+	return KafkaConsumer(name)
+}
+
+func KafkaConsumer(name string) KafkaEventBusOption {
 	return func(config *KafkaEventBusConfig) {
 		config.ConsumerName = name
 	}
@@ -108,7 +113,9 @@ func (q *kafkabus) Next(ctx context.Context, e *Event, listenerId ...string) (er
 	key := make([]byte, len(msg.Key))
 	copy(key, msg.Key)
 	e.ID = string(key)
-	err = q.r.CommitMessages(ctx, msg)
+	if q.config.ConsumerName != "" {
+		err = q.r.CommitMessages(ctx, msg)
+	}
 	return
 }
 

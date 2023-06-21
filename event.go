@@ -51,10 +51,6 @@ const (
 	StopListen = "listen.stop"
 )
 
-func init() {
-
-}
-
 // Event the event representation definition
 type Event struct {
 	// ID event id, always a uuid, it will be auto generated when constructed by New
