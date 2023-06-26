@@ -77,6 +77,22 @@ type Event struct {
 //
 //	events.New("test", []byte("{\"name\": \"\hello\"}")).With(events.EncodingHint, EncodingJson)
 func New(typ string, payloads ...Payloader) *Event {
+	return &Event{
+		ID:        uuid.New().String(),
+		Type:      typ,
+		Metadata:  make(map[string]string),
+		CreatedAt: time.Now(),
+		payloader: func() Payloader {
+			if len(payloads) > 0 {
+				return payloads[0]
+			}
+			return nil
+		}(),
+		payloadPacked: false,
+	}
+}
+
+func GetEvent(typ string, payloads ...Payloader) *Event {
 	e := eventPool.Get().(*Event)
 	e.ID = uuid.New().String()
 	e.Type = typ
