@@ -293,15 +293,10 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 				return ctx.Err()
 			default:
 				done, err := func() (bool, error) {
-					var e *Event
-					defer func() {
-						if e != nil {
-							Put(e)
-						}
-					}()
+					e := GetEvent("")
+					defer Put(e)
 					retry := 0
 					for {
-						e = New("")
 						if err := q.Next(ctx, e, cfg.Id); err != nil {
 							switch {
 							case errors.Is(err, context.Canceled):
