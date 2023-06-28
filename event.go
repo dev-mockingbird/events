@@ -74,30 +74,6 @@ type Event struct {
 	lock sync.RWMutex
 }
 
-func (e *Event) DeepCopy() *Event {
-	e.lock.RLock()
-	defer e.lock.RUnlock()
-	ret := &Event{
-		ID:   e.ID,
-		Type: e.Type,
-		Metadata: func() map[string]string {
-			ret := make(map[string]string)
-			for k, v := range e.Metadata {
-				ret[k] = v
-			}
-			return ret
-		}(),
-		// TODO deep copy time
-		CreatedAt:     e.CreatedAt,
-		Payload:       make([]byte, len(e.Payload)),
-		payloader:     e.payloader,
-		payloadPacked: e.payloadPacked,
-		lock:          sync.RWMutex{},
-	}
-	copy(ret.Payload, e.Payload)
-	return ret
-}
-
 // New an event, it should use with With method to set the encoding-hint if payload emerged
 // example:
 //

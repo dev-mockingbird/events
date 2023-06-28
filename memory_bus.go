@@ -53,7 +53,7 @@ func (m *memorybusManager) get(name string) *memorybus {
 }
 
 type memorybus struct {
-	ch          *chan *Event
+	ch          *chan Event
 	name        string
 	entries     []*memorybusEntry
 	stopped     bool
@@ -63,7 +63,7 @@ type memorybus struct {
 
 type memorybusEntry struct {
 	id        uuid.UUID
-	listeners map[string]*chan *Event
+	listeners map[string]*chan Event
 	lock      sync.RWMutex
 	memorybus *memorybus
 }
@@ -83,7 +83,7 @@ func (m *memorybus) start() {
 					entry.lock.RLock()
 					defer entry.lock.RUnlock()
 					for _, listener := range entry.listeners {
-						*listener <- e.DeepCopy()
+						*listener <- e
 					}
 				}(entry)
 			}
@@ -94,7 +94,7 @@ func (m *memorybus) start() {
 func newMemorybusEntry(bus *memorybus, bufSize int) *memorybusEntry {
 	return &memorybusEntry{
 		id:        uuid.New(),
-		listeners: make(map[string]*chan *Event),
+		listeners: make(map[string]*chan Event),
 		memorybus: bus,
 	}
 }
@@ -111,7 +111,7 @@ func MemoryEventBus(name string, bufSize int) EventBus {
 		bus.entries = append(bus.entries, entry)
 		return entry
 	}
-	ch := make(chan *Event, bufSize)
+	ch := make(chan Event, bufSize)
 	bus = &memorybus{
 		name: name,
 		ch:   &ch,
@@ -133,7 +133,7 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 	}
 	ch := make(chan struct{}, 1)
 	go func() {
-		*q.memorybus.ch <- e
+		*q.memorybus.ch <- *e
 		ch <- struct{}{}
 	}()
 	select {
@@ -146,7 +146,7 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 
 func (q *memorybusEntry) RegisterListener(id string) {
 	q.lock.Lock()
-	ch := make(chan *Event)
+	ch := make(chan Event)
 	q.listeners[id] = &ch
 	q.lock.Unlock()
 }
@@ -173,9 +173,7 @@ func (q *memorybusEntry) Next(ctx context.Context, e *Event, listenerId ...strin
 		if !ok {
 			err = errors.New("no listener found")
 		}
-		if ev := <-*lch; ev != nil {
-			*e = *ev
-		}
+		*e = <-*lch
 		ch <- struct{}{}
 	}()
 	select {
