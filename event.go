@@ -70,6 +70,32 @@ type Event struct {
 	payloader Payloader `json:"-"`
 
 	payloadPacked bool `json:"-"`
+
+	lock sync.RWMutex
+}
+
+func (e *Event) DeepCopy() *Event {
+	e.lock.RLock()
+	defer e.lock.RUnlock()
+	ret := &Event{
+		ID:   e.ID,
+		Type: e.Type,
+		Metadata: func() map[string]string {
+			ret := make(map[string]string)
+			for k, v := range e.Metadata {
+				ret[k] = v
+			}
+			return ret
+		}(),
+		// TODO deep copy time
+		CreatedAt:     e.CreatedAt,
+		Payload:       make([]byte, len(e.Payload)),
+		payloader:     e.payloader,
+		payloadPacked: e.payloadPacked,
+		lock:          sync.RWMutex{},
+	}
+	copy(ret.Payload, e.Payload)
+	return ret
 }
 
 // New an event, it should use with With method to set the encoding-hint if payload emerged
@@ -115,6 +141,8 @@ func Put(e *Event) {
 
 // With, set the metadata of an event
 func (e *Event) With(k, v string) *Event {
+	e.lock.Lock()
+	defer e.lock.Unlock()
 	e.Metadata[k] = v
 	return e
 }
@@ -125,9 +153,12 @@ func (e *Event) PackPayload() error {
 		return nil
 	}
 	var err error
+	e.lock.Lock()
 	if e.Payload, err = e.payloader.Payload(); err != nil {
+		e.lock.Unlock()
 		return err
 	}
+	e.lock.Unlock()
 	e.With(EncodingHint, e.payloader.Encoding())
 
 	return nil
@@ -135,6 +166,8 @@ func (e *Event) PackPayload() error {
 
 // UnpackPayload
 func (e *Event) UnpackPayload(data any, unpackers ...PayloadUnpacker) error {
+	e.lock.RLock()
+	defer e.lock.RUnlock()
 	if len(e.Payload) == 0 {
 		return errors.New("payload empty")
 	}
@@ -283,7 +316,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 	completeListenConfig(&cfg)
 	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
 		if reg, ok := q.(ListenerRegisterer); ok {
-			fmt.Printf("listen: %s\n", cfg.Id)
+			cfg.Logger.Logf(logf.Trace, "default listener start listen: %s\n", cfg.Id)
 			reg.RegisterListener(cfg.Id)
 			defer reg.UnregisterListener(cfg.Id)
 		}
@@ -293,9 +326,8 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 				return ctx.Err()
 			default:
 				done, err := func() (bool, error) {
-					// e := GetEvent("")
-					// defer Put(e)
-					e := &Event{}
+					e := GetEvent("")
+					defer Put(e)
 					retry := 0
 					for {
 						if err := q.Next(ctx, e, cfg.Id); err != nil {
@@ -320,7 +352,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 							cfg.Logger.Logf(logf.Info, "listen canceled by handler")
 							return true, nil
 						}
-						cfg.Logger.Logf(logf.Error, "%s: %s", e.Type, err.Error)
+						cfg.Logger.Logf(logf.Error, "%s: %s", e.Type, err.Error())
 					}
 					return false, nil
 				}()

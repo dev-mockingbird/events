@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/google/uuid"
@@ -52,7 +53,7 @@ func (m *memorybusManager) get(name string) *memorybus {
 }
 
 type memorybus struct {
-	ch          *chan Event
+	ch          *chan *Event
 	name        string
 	entries     []*memorybusEntry
 	stopped     bool
@@ -62,7 +63,7 @@ type memorybus struct {
 
 type memorybusEntry struct {
 	id        uuid.UUID
-	listeners map[string]*chan Event
+	listeners map[string]*chan *Event
 	lock      sync.RWMutex
 	memorybus *memorybus
 }
@@ -82,7 +83,7 @@ func (m *memorybus) start() {
 					entry.lock.RLock()
 					defer entry.lock.RUnlock()
 					for _, listener := range entry.listeners {
-						*listener <- e
+						*listener <- e.DeepCopy()
 					}
 				}(entry)
 			}
@@ -93,7 +94,7 @@ func (m *memorybus) start() {
 func newMemorybusEntry(bus *memorybus, bufSize int) *memorybusEntry {
 	return &memorybusEntry{
 		id:        uuid.New(),
-		listeners: make(map[string]*chan Event),
+		listeners: make(map[string]*chan *Event),
 		memorybus: bus,
 	}
 }
@@ -110,7 +111,7 @@ func MemoryEventBus(name string, bufSize int) EventBus {
 		bus.entries = append(bus.entries, entry)
 		return entry
 	}
-	ch := make(chan Event, bufSize)
+	ch := make(chan *Event, bufSize)
 	bus = &memorybus{
 		name: name,
 		ch:   &ch,
@@ -132,7 +133,7 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 	}
 	ch := make(chan struct{}, 1)
 	go func() {
-		*q.memorybus.ch <- *e
+		*q.memorybus.ch <- e
 		ch <- struct{}{}
 	}()
 	select {
@@ -145,7 +146,7 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 
 func (q *memorybusEntry) RegisterListener(id string) {
 	q.lock.Lock()
-	ch := make(chan Event)
+	ch := make(chan *Event)
 	q.listeners[id] = &ch
 	q.lock.Unlock()
 }
@@ -161,22 +162,25 @@ func (q *memorybusEntry) UnregisterListener(id string) {
 
 func (q *memorybusEntry) Next(ctx context.Context, e *Event, listenerId ...string) error {
 	ch := make(chan struct{}, 1)
+	var err error
 	go func() {
 		if len(listenerId) == 0 {
-			panic("no listener id found")
+			err = errors.New("no listener id found")
 		}
 		q.lock.RLock()
 		lch, ok := q.listeners[listenerId[0]]
 		q.lock.RUnlock()
 		if !ok {
-			panic("no listener found")
+			err = errors.New("no listener found")
 		}
-		*e = <-*lch
+		if ev := <-*lch; ev != nil {
+			*e = *ev
+		}
 		ch <- struct{}{}
 	}()
 	select {
 	case <-ch:
-		return nil
+		return err
 	case <-ctx.Done():
 		return ctx.Err()
 	}
