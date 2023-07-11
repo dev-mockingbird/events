@@ -133,7 +133,9 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 	}
 	ch := make(chan struct{}, 1)
 	go func() {
-		*q.memorybus.ch <- *e
+		me := GetEvent("")
+		Copy(me, e)
+		*q.memorybus.ch <- *me
 		ch <- struct{}{}
 	}()
 	select {
@@ -173,7 +175,8 @@ func (q *memorybusEntry) Next(ctx context.Context, e *Event, listenerId ...strin
 		if !ok {
 			err = errors.New("no listener found")
 		}
-		*e = <-*lch
+		me := <-*lch
+		Copy(e, &me)
 		ch <- struct{}{}
 	}()
 	select {

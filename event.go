@@ -70,8 +70,24 @@ type Event struct {
 	payloader Payloader `json:"-"`
 
 	payloadPacked bool `json:"-"`
+}
 
-	lock sync.RWMutex
+func Copy(dst, src *Event) {
+	dst.ID = src.ID
+	dst.Type = src.Type
+	dst.Metadata = make(map[string]string, len(src.Metadata))
+	for k, v := range src.Metadata {
+		dst.Metadata[k] = v
+	}
+	dst.CreatedAt = src.CreatedAt
+	if len(src.Payload) != 0 {
+		dst.Payload = make([]byte, len(src.Payload))
+		_ = copy(dst.Payload, src.Payload)
+	}
+	if src.payloader != nil {
+		dst.payloader = src.payloader
+	}
+	dst.payloadPacked = src.payloadPacked
 }
 
 // New an event, it should use with With method to set the encoding-hint if payload emerged
@@ -117,8 +133,6 @@ func Put(e *Event) {
 
 // With, set the metadata of an event
 func (e *Event) With(k, v string) *Event {
-	e.lock.Lock()
-	defer e.lock.Unlock()
 	e.Metadata[k] = v
 	return e
 }
@@ -129,12 +143,9 @@ func (e *Event) PackPayload() error {
 		return nil
 	}
 	var err error
-	e.lock.Lock()
 	if e.Payload, err = e.payloader.Payload(); err != nil {
-		e.lock.Unlock()
 		return err
 	}
-	e.lock.Unlock()
 	e.With(EncodingHint, e.payloader.Encoding())
 
 	return nil
@@ -142,8 +153,6 @@ func (e *Event) PackPayload() error {
 
 // UnpackPayload
 func (e *Event) UnpackPayload(data any, unpackers ...PayloadUnpacker) error {
-	e.lock.RLock()
-	defer e.lock.RUnlock()
 	if len(e.Payload) == 0 {
 		return errors.New("payload empty")
 	}
