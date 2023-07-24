@@ -63,22 +63,17 @@ func (mr *MockEventBusMockRecorder) Name() *gomock.Call {
 }
 
 // Next mocks base method.
-func (m *MockEventBus) Next(ctx context.Context, e *Event, listenerId ...string) error {
+func (m *MockEventBus) Next(ctx context.Context, listenerId string, e *Event) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, e}
-	for _, a := range listenerId {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "Next", varargs...)
+	ret := m.ctrl.Call(m, "Next", ctx, listenerId, e)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Next indicates an expected call of Next.
-func (mr *MockEventBusMockRecorder) Next(ctx, e interface{}, listenerId ...interface{}) *gomock.Call {
+func (mr *MockEventBusMockRecorder) Next(ctx, listenerId, e interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, e}, listenerId...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockEventBus)(nil).Next), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockEventBus)(nil).Next), ctx, listenerId, e)
 }
 
 // MockListenerRegisterer is a mock of ListenerRegisterer interface.
