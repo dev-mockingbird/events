@@ -20,14 +20,14 @@ func TestMemoryEventBus_moreListener(t *testing.T) {
 		total += i
 		wg.Add(1)
 		go func(id int) {
-			DefaultListener(Id(fmt.Sprintf("%d", id))).Listen(ctx, q, Handle(func(ctx context.Context, e *Event) error {
+			DefaultListener(fmt.Sprintf("%d", id)).Listen(ctx, q, Handle(func(ctx context.Context, e *Event) error {
 				lock.Lock()
 				result += id
 				lock.Unlock()
 				fmt.Printf("listener: %d. received: %s\n", id, e.Type)
-				wg.Done()
 				return ListenComplete
 			}))
+			wg.Done()
 		}(i)
 	}
 	time.Sleep(time.Second)
@@ -40,7 +40,6 @@ func TestMemoryEventBus_moreListener(t *testing.T) {
 
 func TestMemoryEventBus(t *testing.T) {
 	q := MemoryEventBus("test", 10)
-	q.(ListenerRegisterer).RegisterListener("1")
 	var wg sync.WaitGroup
 	wg.Add(2)
 	var total int
@@ -57,7 +56,7 @@ func TestMemoryEventBus(t *testing.T) {
 		defer wg.Done()
 		for {
 			var e Event
-			if err = q.Next(context.Background(), &e, "1"); err != nil {
+			if err = q.Next(context.Background(), "1", &e); err != nil {
 				return
 			}
 			var i int
@@ -81,13 +80,11 @@ func TestMemoryEventBus(t *testing.T) {
 
 func TestMemoryBusCancel(t *testing.T) {
 	q := MemoryEventBus("test", 10)
-	reg := q.(ListenerRegisterer)
-	reg.RegisterListener("1")
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error)
 	go func() {
 		var e Event
-		if err := q.Next(ctx, &e, "1"); err != nil {
+		if err := q.Next(ctx, "1", &e); err != nil {
 			errCh <- err
 			return
 		}
@@ -109,13 +106,11 @@ func TestMemoryBus_MoreConsumer(t *testing.T) {
 	var lock sync.Mutex
 	for i := 0; i < 100; i++ {
 		q := MemoryEventBus("test", 10)
-		req := q.(ListenerRegisterer)
-		req.RegisterListener("1")
 		wg.Add(1)
 		go func(q EventBus) {
 			defer wg.Done()
 			var e Event
-			if err := q.Next(ctx, &e, "1"); err != nil {
+			if err := q.Next(ctx, "1", &e); err != nil {
 				errCh <- err
 				return
 			}
@@ -141,17 +136,16 @@ func TestMemoryBus_MoreConsumer(t *testing.T) {
 
 func TestMemoryBus_Close(t *testing.T) {
 	q := MemoryEventBus("test", 10)
-	req := q.(ListenerRegisterer)
-	req.RegisterListener("1")
 	errCh := make(chan error)
 	go func() {
 		var e Event
-		if err := q.Next(context.Background(), &e, "1"); err != nil {
+		if err := q.Next(context.Background(), "1", &e); err != nil {
 			errCh <- err
 			return
 		}
 		errCh <- nil
 	}()
+	time.Sleep(time.Millisecond * 50)
 	if err := q.(Closer).Close(); err != nil {
 		t.Fatal(err)
 	}

@@ -180,7 +180,7 @@ type EventBus interface {
 	// Add, push event to the queue
 	Add(ctx context.Context, e *Event) error
 	// Next, grab next event from queue
-	Next(ctx context.Context, e *Event, listenerId ...string) error
+	Next(ctx context.Context, listenerId string, e *Event) error
 }
 
 type ListenerRegisterer interface {
@@ -226,13 +226,14 @@ func (listen Listen) Listen(ctx context.Context, q EventBus, handle Handler) err
 
 // DefaultListenerConfig config for default listener
 type DefaultListenerConfig struct {
+	Name string
 	// BufSize all unconsumed local event will present in memory channel, event message could be lost if machine shuting down emerging
 	// make the handle as small as possible to minimize the circlestance
 	BufSize int
 	// NextRetries if read next message failed, it should retry automatically NexRetries times
 	NextRetryStrategy NextRetryStrategy
 	Id                string
-	Logger            logf.Logfer
+	Logger            logf.Logger
 }
 
 // DefaultListenerOption the argument type for DefaultListener
@@ -256,7 +257,7 @@ func NextRetry(strategy NextRetryStrategy) DefaultListenerOption {
 }
 
 // Logger config logger
-func Logger(logger logf.Logfer) DefaultListenerOption {
+func Logger(logger logf.Logger) DefaultListenerOption {
 	return func(cfg *DefaultListenerConfig) {
 		cfg.Logger = logger
 	}
@@ -293,18 +294,14 @@ func completeListenConfig(cfg *DefaultListenerConfig) {
 }
 
 // DefaultListener return a default listener
-func DefaultListener(opts ...DefaultListenerOption) Listener {
-	var cfg DefaultListenerConfig
+func DefaultListener(name string, opts ...DefaultListenerOption) Listener {
+	cfg := DefaultListenerConfig{Name: name}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 	completeListenConfig(&cfg)
+	cfg.Logger = cfg.Logger.Prefix(fmt.Sprintf("event listener [%s]: ", name))
 	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
-		if reg, ok := q.(ListenerRegisterer); ok {
-			cfg.Logger.Logf(logf.Trace, "default listener start listen: %s\n", cfg.Id)
-			reg.RegisterListener(cfg.Id)
-			defer reg.UnregisterListener(cfg.Id)
-		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -315,7 +312,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 					defer Put(e)
 					retry := 0
 					for {
-						if err := q.Next(ctx, e, cfg.Id); err != nil {
+						if err := q.Next(ctx, cfg.Name, e); err != nil {
 							switch {
 							case errors.Is(err, context.Canceled):
 								cfg.Logger.Logf(logf.Warn, "context canceled listening")
@@ -330,7 +327,7 @@ func DefaultListener(opts ...DefaultListenerOption) Listener {
 						}
 						break
 					}
-					cfg.Logger.Logf(logf.Trace, "received message [%s: %s] queue [%s]", e.Type, e.ID, q.Name())
+					cfg.Logger.Logf(logf.Debug, "received message [%s: %s] queue [%s]", e.Type, e.ID, q.Name())
 					cfg.Logger.Logf(logf.Trace, " payload: %s", e.Payload)
 					if err := handler.Handle(ctx, e); err != nil {
 						if errors.Is(err, ListenComplete) {

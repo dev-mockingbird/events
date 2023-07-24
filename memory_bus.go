@@ -2,7 +2,6 @@ package events
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/google/uuid"
@@ -146,34 +145,19 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 	}
 }
 
-func (q *memorybusEntry) RegisterListener(id string) {
-	q.lock.Lock()
-	ch := make(chan Event)
-	q.listeners[id] = &ch
-	q.lock.Unlock()
-}
-
-func (q *memorybusEntry) UnregisterListener(id string) {
-	q.lock.Lock()
-	defer q.lock.Unlock()
-	if ch, ok := q.listeners[id]; ok {
-		close(*ch)
-	}
-	delete(q.listeners, id)
-}
-
-func (q *memorybusEntry) Next(ctx context.Context, e *Event, listenerId ...string) error {
+func (q *memorybusEntry) Next(ctx context.Context, listenerId string, e *Event) error {
 	ch := make(chan struct{}, 1)
 	var err error
 	go func() {
-		if len(listenerId) == 0 {
-			err = errors.New("no listener id found")
-		}
 		q.lock.RLock()
-		lch, ok := q.listeners[listenerId[0]]
+		lch, ok := q.listeners[listenerId]
 		q.lock.RUnlock()
 		if !ok {
-			err = errors.New("no listener found")
+			l := make(chan Event, 1)
+			lch = &l
+			q.lock.Lock()
+			q.listeners[listenerId] = lch
+			q.lock.Unlock()
 		}
 		me := <-*lch
 		Copy(e, &me)

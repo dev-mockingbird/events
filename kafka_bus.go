@@ -37,17 +37,6 @@ func KafkaTopic(topic string) KafkaEventBusOption {
 	}
 }
 
-// Deprecated: KafkaConsumerName is deprecated, use KafkaConsumer instead
-func KafkaConsumerName(name string) KafkaEventBusOption {
-	return KafkaConsumer(name)
-}
-
-func KafkaConsumer(name string) KafkaEventBusOption {
-	return func(config *KafkaEventBusConfig) {
-		config.ConsumerName = name
-	}
-}
-
 func KafkaBus(opts ...KafkaEventBusOption) EventBus {
 	q := kafkabus{}
 	for _, opt := range opts {
@@ -86,12 +75,12 @@ func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
 	return nil
 }
 
-func (q *kafkabus) Next(ctx context.Context, e *Event, listenerId ...string) (err error) {
+func (q *kafkabus) Next(ctx context.Context, listenerId string, e *Event) (err error) {
 	q.rOnce.Do(func() {
 		q.r = kafka.NewReader(kafka.ReaderConfig{
 			Brokers: q.config.Brokers,
 			Topic:   q.config.Topic,
-			GroupID: q.config.ConsumerName,
+			GroupID: listenerId,
 		})
 	})
 	var msg kafka.Message

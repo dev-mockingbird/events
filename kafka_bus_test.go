@@ -29,8 +29,8 @@ func TestKafkaBus(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			q := KafkaBus(KafkaBrokers(brokers...), KafkaTopic(topic), KafkaConsumer(fmt.Sprintf("%d", id)))
-			DefaultListener().Listen(ctx, q, Handle(func(ctx context.Context, e *Event) error {
+			q := KafkaBus(KafkaBrokers(brokers...), KafkaTopic(topic))
+			DefaultListener(fmt.Sprintf("%d", id)).Listen(ctx, q, Handle(func(ctx context.Context, e *Event) error {
 				var i int
 				if err = e.UnpackPayload(&i); err != nil {
 					panic(err)
@@ -50,8 +50,8 @@ func TestKafkaBus(t *testing.T) {
 			}))
 		}(i)
 	}
-	time.Sleep(time.Second)
-	q := KafkaBus(KafkaBrokers(brokers...), KafkaTopic(topic), KafkaConsumer("test"))
+	time.Sleep(time.Millisecond * 50)
+	q := KafkaBus(KafkaBrokers(brokers...), KafkaTopic(topic))
 	var total int
 	for i := 0; i < 10; i++ {
 		total += i
@@ -60,7 +60,7 @@ func TestKafkaBus(t *testing.T) {
 		}
 	}
 	wg.Wait()
-	time.Sleep(time.Second)
+	time.Sleep(time.Millisecond * 100)
 	for id, v := range result {
 		t.Logf("id: %d, v: %d, total: %d\n", id, v, total)
 		if v != total {

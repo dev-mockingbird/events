@@ -16,7 +16,7 @@ func TestDefaultListener(t *testing.T) {
 	rand.Seed(time.Now().UnixMicro())
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	listener := DefaultListener(BufSize(10))
+	listener := DefaultListener("test", BufSize(10))
 	q := MemoryEventBus("test", 10)
 	var total int
 	var wg sync.WaitGroup
@@ -54,7 +54,7 @@ func TestDefaultListenerCancel(t *testing.T) {
 	q := MemoryEventBus("test", 10)
 	ch := make(chan error, 1)
 	go func() {
-		err := DefaultListener().Listen(ctx, q, LogHandler(logf.New()))
+		err := DefaultListener("test").Listen(ctx, q, LogHandler(logf.New()))
 		ch <- err
 	}()
 	cancel()
