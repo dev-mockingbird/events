@@ -60,7 +60,6 @@ func TestKafkaBus(t *testing.T) {
 		}
 	}
 	wg.Wait()
-	time.Sleep(time.Millisecond * 100)
 	for id, v := range result {
 		t.Logf("id: %d, v: %d, total: %d\n", id, v, total)
 		if v != total {

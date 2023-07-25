@@ -10,17 +10,16 @@ import (
 const kafkaTypeKey = "__type__"
 
 type kafkabus struct {
-	config KafkaEventBusConfig
-	w      *kafka.Writer
-	wOnce  sync.Once
-	r      *kafka.Reader
-	rOnce  sync.Once
+	config      KafkaEventBusConfig
+	w           *kafka.Writer
+	wOnce       sync.Once
+	readers     map[string]*kafka.Reader
+	readersLock sync.RWMutex
 }
 
 type KafkaEventBusConfig struct {
-	Brokers      []string
-	Topic        string
-	ConsumerName string
+	Brokers []string
+	Topic   string
 }
 
 type KafkaEventBusOption func(config *KafkaEventBusConfig)
@@ -38,7 +37,7 @@ func KafkaTopic(topic string) KafkaEventBusOption {
 }
 
 func KafkaBus(opts ...KafkaEventBusOption) EventBus {
-	q := kafkabus{}
+	q := kafkabus{readers: make(map[string]*kafka.Reader)}
 	for _, opt := range opts {
 		opt(&q.config)
 	}
@@ -46,14 +45,15 @@ func KafkaBus(opts ...KafkaEventBusOption) EventBus {
 }
 
 func (q *kafkabus) Name() string {
-	return "kafka-" + q.config.Topic + "-" + q.config.ConsumerName
+	return "kafka-" + q.config.Topic
 }
 
 func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
 	q.wOnce.Do(func() {
 		q.w = &kafka.Writer{
-			Addr:  kafka.TCP(q.config.Brokers...),
-			Topic: q.config.Topic,
+			Addr:                   kafka.TCP(q.config.Brokers...),
+			Topic:                  q.config.Topic,
+			AllowAutoTopicCreation: true,
 		}
 	})
 	if err := e.PackPayload(); err != nil {
@@ -76,15 +76,21 @@ func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
 }
 
 func (q *kafkabus) Next(ctx context.Context, listenerId string, e *Event) (err error) {
-	q.rOnce.Do(func() {
-		q.r = kafka.NewReader(kafka.ReaderConfig{
+	q.readersLock.RLock()
+	reader, ok := q.readers[listenerId]
+	q.readersLock.RUnlock()
+	if !ok {
+		reader = kafka.NewReader(kafka.ReaderConfig{
 			Brokers: q.config.Brokers,
 			Topic:   q.config.Topic,
 			GroupID: listenerId,
 		})
-	})
+		q.readersLock.Lock()
+		q.readers[listenerId] = reader
+		q.readersLock.Unlock()
+	}
 	var msg kafka.Message
-	if msg, err = q.r.ReadMessage(ctx); err != nil {
+	if msg, err = reader.ReadMessage(ctx); err != nil {
 		return
 	}
 	e.Metadata = make(map[string]string)
@@ -102,19 +108,16 @@ func (q *kafkabus) Next(ctx context.Context, listenerId string, e *Event) (err e
 	key := make([]byte, len(msg.Key))
 	copy(key, msg.Key)
 	e.ID = string(key)
-	if q.config.ConsumerName != "" {
-		err = q.r.CommitMessages(ctx, msg)
-	}
 	return
 }
 
 func (q *kafkabus) Close() error {
-	if q.r != nil {
-		if err := q.r.Close(); err != nil {
-			return err
-		}
-		q.rOnce = sync.Once{}
+	q.readersLock.Lock()
+	for k, reader := range q.readers {
+		reader.Close()
+		delete(q.readers, k)
 	}
+	q.readersLock.Unlock()
 	if q.w != nil {
 		if err := q.w.Close(); err != nil {
 			return err
