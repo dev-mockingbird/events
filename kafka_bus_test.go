@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 func TestKafkaBus(t *testing.T) {
@@ -50,7 +49,6 @@ func TestKafkaBus(t *testing.T) {
 			}))
 		}(i)
 	}
-	time.Sleep(time.Millisecond * 50)
 	q := KafkaBus(KafkaBrokers(brokers...), KafkaTopic(topic))
 	var total int
 	for i := 0; i < 10; i++ {
