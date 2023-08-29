@@ -13,10 +13,10 @@ import (
 )
 
 func TestDefaultListener(t *testing.T) {
-	rand.Seed(time.Now().UnixMicro())
+	rand.Seed(time.Now().Unix())
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	listener := DefaultListener("test", BufSize(10))
+	listener := DefaultListener("test")
 	q := MemoryEventBus("test", 10)
 	var total int
 	var wg sync.WaitGroup
