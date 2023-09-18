@@ -3,7 +3,6 @@ package events
 import (
 	"context"
 	"errors"
-	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -13,7 +12,6 @@ import (
 )
 
 func TestDefaultListener(t *testing.T) {
-	rand.Seed(time.Now().Unix())
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	listener := DefaultListener("test")

@@ -123,7 +123,7 @@ func MemoryEventBus(name string, bufSize int) EventBus {
 }
 
 func (q *memorybusEntry) Name() string {
-	return q.memorybus.name + "-" + q.id.String()
+	return q.memorybus.name
 }
 
 func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {

@@ -63,8 +63,17 @@ func DefaultListener(name string, opts ...DefaultListenerOption) Listener {
 		opt(&cfg)
 	}
 	completeListenConfig(&cfg)
-	cfg.Logger = cfg.Logger.Prefix(fmt.Sprintf("event listener [%s]: ", name))
-	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
+
+	var listen func(ctx context.Context, q EventBus, handler Handler) (err error)
+
+	listen = func(ctx context.Context, q EventBus, handler Handler) (err error) {
+		logger := cfg.Logger.Prefix(fmt.Sprintf("event listener [%s(%s)]: ", name, q.Name()))
+		defer func() {
+			if err := recover(); err != nil {
+				logger.Logf(logf.Error, "event listener [%s %s]: %v", name, q.Name(), err)
+				err = listen(ctx, q, handler)
+			}
+		}()
 		for {
 			select {
 			case <-ctx.Done():
@@ -75,14 +84,13 @@ func DefaultListener(name string, opts ...DefaultListenerOption) Listener {
 					defer Put(e)
 					retry := 0
 					for {
-						cfg.Logger.Logf(logf.Trace, "receiving next...")
 						if err := q.Next(ctx, name, e); err != nil {
 							switch {
 							case errors.Is(err, context.Canceled):
-								cfg.Logger.Logf(logf.Info, "listen canceled by handler (read next)")
+								logger.Logf(logf.Info, "listen canceled by handler (read next)")
 								return true, nil
 							case !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err):
-								cfg.Logger.Logf(logf.Info, "read next from event bus[%s](retry %d): %s. should retry again.", name, retry, err.Error())
+								logger.Logf(logf.Info, "read next from event bus[%s](retry %d): %s. should retry again.", name, retry, err.Error())
 								retry++
 								continue
 							}
@@ -90,11 +98,11 @@ func DefaultListener(name string, opts ...DefaultListenerOption) Listener {
 						}
 						break
 					}
-					cfg.Logger.Logf(logf.Debug, "received message [%s: %s]", e.Type, e.ID)
-					cfg.Logger.Logf(logf.Trace, " payload: %s", e.Payload)
+					logger.Logf(logf.Debug, "received message [%s: %s]", e.Type, e.ID)
+					logger.Logf(logf.Trace, " payload: %s", e.Payload)
 					if err := handler.Handle(ctx, e); err != nil {
 						if errors.Is(err, ListenComplete) {
-							cfg.Logger.Logf(logf.Info, "listen canceled by handler (handle event)")
+							logger.Logf(logf.Info, "listen canceled by handler (handle event)")
 							return true, nil
 						}
 						return false, err
@@ -106,5 +114,9 @@ func DefaultListener(name string, opts ...DefaultListenerOption) Listener {
 				}
 			}
 		}
+	}
+
+	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
+		return listen(ctx, q, handler)
 	})
 }
