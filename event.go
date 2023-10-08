@@ -9,16 +9,15 @@ import (
 	"time"
 
 	"github.com/dev-mockingbird/logf"
-	"github.com/google/uuid"
 )
 
 const (
 	// EncodingHing indicate the event.Data encoding
-	EncodingHint = "encoding-hint"
+	Encoding = "encoding"
 	// EncodingJson indicate the event.Data is json encoded
-	EncodingJson = "encoding/json"
+	EncodingJson = "json"
 	// EncodingProto indicate the event.Data is proto encoded
-	EncodingProto = "encoding/proto"
+	EncodingProto = "proto"
 )
 
 var (
@@ -52,8 +51,6 @@ const (
 
 // Event the event representation definition
 type Event struct {
-	// ID event id, always a uuid, it will be auto generated when constructed by New
-	ID string `json:"id"`
 	// Type event type, it should a dot joint string, such as "channel.message.created"
 	Type string `json:"type"`
 	// Metadata the metadata describes the primary info as a significant part of the event
@@ -62,7 +59,7 @@ type Event struct {
 	// value should be "/" splited string
 	Metadata map[string]string `json:"metadata,omitempty"`
 	// CreatedAt
-	CreatedAt time.Time `json:"created_at"`
+	CreateTimestamp int64 `json:"create_timestamp"`
 	// Payload
 	Payload []byte `json:"data,omitempty"`
 
@@ -72,13 +69,12 @@ type Event struct {
 }
 
 func Copy(dst, src *Event) {
-	dst.ID = src.ID
 	dst.Type = src.Type
 	dst.Metadata = make(map[string]string, len(src.Metadata))
 	for k, v := range src.Metadata {
 		dst.Metadata[k] = v
 	}
-	dst.CreatedAt = src.CreatedAt
+	dst.CreateTimestamp = src.CreateTimestamp
 	if len(src.Payload) != 0 {
 		dst.Payload = make([]byte, len(src.Payload))
 		_ = copy(dst.Payload, src.Payload)
@@ -95,10 +91,9 @@ func Copy(dst, src *Event) {
 //	events.New("test", []byte("{\"name\": \"\hello\"}")).With(events.EncodingHint, EncodingJson)
 func New(typ string, payloads ...Payloader) *Event {
 	return &Event{
-		ID:        uuid.New().String(),
-		Type:      typ,
-		Metadata:  make(map[string]string),
-		CreatedAt: time.Now(),
+		Type:            typ,
+		Metadata:        make(map[string]string),
+		CreateTimestamp: time.Now().Unix(),
 		payloader: func() Payloader {
 			if len(payloads) > 0 {
 				return payloads[0]
@@ -111,10 +106,9 @@ func New(typ string, payloads ...Payloader) *Event {
 
 func GetEvent(typ string, payloads ...Payloader) *Event {
 	e := eventPool.Get().(*Event)
-	e.ID = uuid.New().String()
 	e.Type = typ
 	e.Metadata = make(map[string]string)
-	e.CreatedAt = time.Now()
+	e.CreateTimestamp = time.Now().Unix()
 	e.Payload = nil
 	e.payloader = func() Payloader {
 		if len(payloads) > 0 {
@@ -145,7 +139,7 @@ func (e *Event) PackPayload() error {
 	if e.Payload, err = e.payloader.Payload(); err != nil {
 		return err
 	}
-	e.With(EncodingHint, e.payloader.Encoding())
+	e.With(Encoding, e.payloader.Encoding())
 
 	return nil
 }
@@ -155,7 +149,7 @@ func (e *Event) UnpackPayload(data any, unpackers ...PayloadUnpacker) error {
 	if len(e.Payload) == 0 {
 		return errors.New("payload empty")
 	}
-	hint, ok := e.Metadata[EncodingHint]
+	hint, ok := e.Metadata[Encoding]
 	if !ok {
 		return NoEncodingHint
 	}

@@ -98,7 +98,7 @@ func DefaultListener(name string, opts ...DefaultListenerOption) Listener {
 						}
 						break
 					}
-					logger.Logf(logf.Debug, "received message [%s: %s]", e.Type, e.ID)
+					logger.Logf(logf.Debug, "received message [%s]", e.Type)
 					logger.Logf(logf.Trace, " payload: %s", e.Payload)
 					if err := handler.Handle(ctx, e); err != nil {
 						if errors.Is(err, ListenComplete) {

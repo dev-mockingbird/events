@@ -60,7 +60,6 @@ func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
 		return err
 	}
 	msg := kafka.Message{
-		Key:     []byte(e.ID),
 		Value:   e.Payload,
 		Headers: make([]kafka.Header, len(e.Metadata)+1),
 	}
@@ -107,7 +106,6 @@ func (q *kafkabus) Next(ctx context.Context, listenerId string, e *Event) (err e
 	copy(e.Payload, msg.Value)
 	key := make([]byte, len(msg.Key))
 	copy(key, msg.Key)
-	e.ID = string(key)
 	return
 }
 
