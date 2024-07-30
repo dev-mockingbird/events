@@ -20,18 +20,20 @@ func TestMemoryEventBus_moreListener(t *testing.T) {
 		total += i
 		wg.Add(1)
 		go func(id int) {
-			DefaultListener(fmt.Sprintf("%d", id)).Listen(ctx, q, Handle(func(ctx context.Context, e *Event) error {
+			listener := GetListener(fmt.Sprintf("%d", id), q)
+			listener.Listen(ctx, Handle(func(ctx context.Context, e *Event) error {
 				lock.Lock()
 				result += id
 				lock.Unlock()
-				fmt.Printf("listener: %d. received: %s\n", id, e.Type)
-				return ListenComplete
+				fmt.Printf("listener: %d. received: %s\n", id, e.Name)
+				listener.Stop()
+				return nil
 			}))
 			wg.Done()
 		}(i)
 	}
 	time.Sleep(time.Second)
-	q.Add(ctx, New("test"))
+	q.Push(ctx, New("test"))
 	wg.Wait()
 	if total != result {
 		t.Fatal("error")
@@ -47,7 +49,7 @@ func TestMemoryEventBus(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 10; i++ {
 			total += i
-			q.Add(context.Background(), New("test", Json(i)))
+			q.Push(context.Background(), New("test", Json(i)))
 		}
 	}()
 	var ct int
@@ -56,7 +58,7 @@ func TestMemoryEventBus(t *testing.T) {
 		defer wg.Done()
 		for {
 			var e Event
-			if err = q.Next(context.Background(), "1", &e); err != nil {
+			if err = q.Pop(context.Background(), "1", &e); err != nil {
 				return
 			}
 			var i int
@@ -84,7 +86,7 @@ func TestMemoryBusCancel(t *testing.T) {
 	errCh := make(chan error)
 	go func() {
 		var e Event
-		if err := q.Next(ctx, "1", &e); err != nil {
+		if err := q.Pop(ctx, "1", &e); err != nil {
 			errCh <- err
 			return
 		}
@@ -107,10 +109,10 @@ func TestMemoryBus_MoreConsumer(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		q := MemoryEventBus("test", 10)
 		wg.Add(1)
-		go func(q EventBus) {
+		go func(q EventQueue) {
 			defer wg.Done()
 			var e Event
-			if err := q.Next(ctx, "1", &e); err != nil {
+			if err := q.Pop(ctx, "1", &e); err != nil {
 				errCh <- err
 				return
 			}
@@ -125,7 +127,7 @@ func TestMemoryBus_MoreConsumer(t *testing.T) {
 		}(q)
 	}
 	q := MemoryEventBus("test", 10)
-	if err := q.Add(ctx, New("test", Json(1))); err != nil {
+	if err := q.Push(ctx, New("test", Json(1))); err != nil {
 		t.Fatal(err)
 	}
 	wg.Wait()
@@ -139,7 +141,7 @@ func TestMemoryBus_Close(t *testing.T) {
 	errCh := make(chan error)
 	go func() {
 		var e Event
-		if err := q.Next(context.Background(), "1", &e); err != nil {
+		if err := q.Pop(context.Background(), "1", &e); err != nil {
 			errCh <- err
 			return
 		}

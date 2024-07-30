@@ -14,8 +14,8 @@ import (
 func TestDefaultListener(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	listener := DefaultListener("test")
 	q := MemoryEventBus("test", 10)
+	listener := GetListener("test", q)
 	var total int
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -23,20 +23,20 @@ func TestDefaultListener(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 10; i++ {
 			total += i
-			q.Add(context.Background(), New("test", Json(i)))
+			q.Push(context.Background(), New("test", Json(i)))
 		}
 	}()
 	var ct int
 	go func() {
 		defer wg.Done()
-		listener.Listen(context.Background(), q, Handle(func(ctx context.Context, e *Event) error {
+		listener.Listen(context.Background(), Handle(func(ctx context.Context, e *Event) error {
 			var i int
 			if err := e.UnpackPayload(&i); err != nil {
 				return err
 			}
 			ct += i
 			if ct >= total {
-				return ListenComplete
+				listener.Stop()
 			}
 			return nil
 		}))
@@ -52,7 +52,7 @@ func TestDefaultListenerCancel(t *testing.T) {
 	q := MemoryEventBus("test", 10)
 	ch := make(chan error, 1)
 	go func() {
-		err := DefaultListener("test").Listen(ctx, q, LogHandler(logf.New()))
+		err := GetListener("test", q).Listen(ctx, LogHandler(logf.New()))
 		ch <- err
 	}()
 	cancel()

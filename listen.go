@@ -10,113 +10,115 @@ import (
 	"github.com/dev-mockingbird/logf"
 )
 
-// Listener, the event queue listener, it will get the next event and pass it to handler
-type Listener interface {
-	// Listen, start listen event queue
-	Listen(ctx context.Context, q EventBus, handle Handler) error
+type defaultListener struct {
+	q             EventQueue
+	name          string
+	retryStrategy NextRetryStrategy
+	logger        logf.Logger
+	cancel        func()
+	listening     bool
 }
 
-type Listen func(ctx context.Context, q EventBus, handle Handler) error
-
-func (listen Listen) Listen(ctx context.Context, q EventBus, handle Handler) error {
-	return listen(ctx, q, handle)
-}
-
-// DefaultListenerConfig config for default listener
-type DefaultListenerConfig struct {
-	// NextRetries if read next message failed, it should retry automatically NexRetries times
-	NextRetryStrategy NextRetryStrategy
-	Logger            logf.Logger
-}
-
-// DefaultListenerOption the argument type for DefaultListener
-type DefaultListenerOption func(cfg *DefaultListenerConfig)
+type Option func(l *defaultListener)
 
 // NextRetry config the next retry strategy
-func NextRetry(strategy NextRetryStrategy) DefaultListenerOption {
-	return func(cfg *DefaultListenerConfig) {
-		cfg.NextRetryStrategy = strategy
+func NextRetry(strategy NextRetryStrategy) Option {
+	return func(cfg *defaultListener) {
+		cfg.retryStrategy = strategy
 	}
 }
 
 // Logger config logger
-func Logger(logger logf.Logger) DefaultListenerOption {
-	return func(cfg *DefaultListenerConfig) {
-		cfg.Logger = logger
+func Logger(logger logf.Logger) Option {
+	return func(cfg *defaultListener) {
+		cfg.logger = logger
 	}
 }
 
-// completeListenConfig set default configuration for default listener
-func completeListenConfig(cfg *DefaultListenerConfig) {
-	if cfg.NextRetryStrategy == nil {
-		cfg.NextRetryStrategy = RetryAny(50, time.Second)
+func (l *defaultListener) completeListenConfig() {
+	if l.retryStrategy == nil {
+		l.retryStrategy = RetryAny(50, time.Second)
 	}
-	if cfg.Logger == nil {
-		cfg.Logger = logf.New(logf.LogLevel(logf.Info))
+	if l.logger == nil {
+		l.logger = logf.New(logf.LogLevel(logf.Info))
 	}
 }
 
-// DefaultListener return a default listener
-func DefaultListener(name string, opts ...DefaultListenerOption) Listener {
-	cfg := DefaultListenerConfig{}
-	for _, opt := range opts {
-		opt(&cfg)
+func (l *defaultListener) Stop() error {
+	if !l.listening {
+		return nil
 	}
-	completeListenConfig(&cfg)
+	ch := make(chan struct{}, 1)
+	go func() {
+		l.listening = false
+		l.cancel()
+		ch <- struct{}{}
+	}()
+	<-ch
+	return nil
+}
 
-	var listen func(ctx context.Context, q EventBus, handler Handler) (err error)
+func GetListener(name string, q EventQueue, opts ...Option) Listener {
+	l := defaultListener{
+		name: name,
+		q:    q,
+	}
+	for _, apply := range opts {
+		apply(&l)
+	}
+	l.completeListenConfig()
+	return &l
+}
 
-	listen = func(ctx context.Context, q EventBus, handler Handler) (err error) {
-		logger := cfg.Logger.Prefix(fmt.Sprintf("event listener [%s(%s)]: ", name, q.Name()))
-		defer func() {
-			if err := recover(); err != nil {
-				logger.Logf(logf.Error, "event listener [%s %s]: %v", name, q.Name(), err)
-				err = listen(ctx, q, handler)
-			}
-		}()
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				done, err := func() (bool, error) {
-					e := GetEvent("")
-					defer Put(e)
-					retry := 0
-					for {
-						if err := q.Next(ctx, name, e); err != nil {
-							switch {
-							case errors.Is(err, context.Canceled):
-								logger.Logf(logf.Info, "listen canceled by handler (read next)")
-								return true, nil
-							case !errors.Is(err, io.EOF) && cfg.NextRetryStrategy(retry, err):
-								logger.Logf(logf.Info, "read next from event bus[%s](retry %d): %s. should retry again.", name, retry, err.Error())
-								retry++
-								continue
-							}
-							return true, err
-						}
-						break
-					}
-					logger.Logf(logf.Debug, "received message [%s]", e.Type)
-					logger.Logf(logf.Trace, " payload: %s", e.Payload)
-					if err := handler.Handle(ctx, e); err != nil {
-						if errors.Is(err, ListenComplete) {
-							logger.Logf(logf.Info, "listen canceled by handler (handle event)")
-							return true, nil
-						}
-						return false, err
-					}
-					return false, nil
-				}()
-				if done || err != nil {
-					return err
-				}
+func (l *defaultListener) Listen(ctx context.Context, handler Handler) error {
+	defer func() {
+		l.listening = false
+		if err := recover(); err != nil {
+			l.logger.Logf(logf.Fatal, "event listener[%s-%s]: panic: %v", l.name, l.q.Topic(), err)
+			err = l.Listen(ctx, handler)
+		}
+	}()
+	if l.listening {
+		return fmt.Errorf("listener [%s-%s] is listening", l.name, l.q.Topic())
+	}
+	ctx, l.cancel = context.WithCancel(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if err := l.listen(ctx, handler); err != nil {
+				return err
 			}
 		}
 	}
+}
 
-	return Listen(func(ctx context.Context, q EventBus, handler Handler) error {
-		return listen(ctx, q, handler)
-	})
+func (l *defaultListener) listen(ctx context.Context, handler Handler) error {
+	l.listening = true
+	e := Get("")
+	defer Put(e)
+	retry := 0
+	for {
+		if err := l.q.Pop(ctx, l.name, e); err != nil {
+			switch {
+			case errors.Is(err, context.Canceled):
+				l.logger.Logf(logf.Info, "listen canceled by handler")
+				return nil
+			case !errors.Is(err, io.EOF) && l.retryStrategy(retry, err):
+				l.logger.Logf(logf.Info, "read next from event topic[%s]: %s. should retry again.", l.name, retry, err.Error())
+				retry++
+				continue
+			}
+			l.logger.Logf(logf.Error, "read next from event topic[%s]: %s", err.Error())
+			return err
+		}
+		break
+	}
+	l.logger.Logf(logf.Debug, "received message [%s]", e.Name)
+	l.logger.Logf(logf.Trace, " payload: %s", e.Payload)
+	if err := handler.Handle(ctx, e); err != nil {
+		l.logger.Logf(logf.Error, "handler return an error: %s", err.Error())
+	}
+	return nil
 }

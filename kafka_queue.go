@@ -7,9 +7,9 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-const kafkaTypeKey = "__type__"
+const kafkaNameKey = "__name__"
 
-type kafkabus struct {
+type kafkaQueue struct {
 	config      KafkaEventBusConfig
 	w           *kafka.Writer
 	wOnce       sync.Once
@@ -36,19 +36,19 @@ func KafkaTopic(topic string) KafkaEventBusOption {
 	}
 }
 
-func KafkaBus(opts ...KafkaEventBusOption) EventBus {
-	q := kafkabus{readers: make(map[string]*kafka.Reader)}
+func KafkaQueue(opts ...KafkaEventBusOption) EventQueue {
+	q := kafkaQueue{readers: make(map[string]*kafka.Reader)}
 	for _, opt := range opts {
 		opt(&q.config)
 	}
 	return &q
 }
 
-func (q *kafkabus) Name() string {
-	return "kafka-" + q.config.Topic
+func (q *kafkaQueue) Topic() string {
+	return q.config.Topic
 }
 
-func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
+func (q *kafkaQueue) Push(ctx context.Context, e *Event) (err error) {
 	q.wOnce.Do(func() {
 		q.w = &kafka.Writer{
 			Addr:                   kafka.TCP(q.config.Brokers...),
@@ -63,7 +63,7 @@ func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
 		Value:   e.Payload,
 		Headers: make([]kafka.Header, len(e.Metadata)+1),
 	}
-	msg.Headers[0] = kafka.Header{Key: kafkaTypeKey, Value: []byte(e.Type)}
+	msg.Headers[0] = kafka.Header{Key: kafkaNameKey, Value: []byte(e.Name)}
 	var i int = 1
 	for k, v := range e.Metadata {
 		msg.Headers[i] = kafka.Header{Key: k, Value: []byte(v)}
@@ -74,7 +74,7 @@ func (q *kafkabus) Add(ctx context.Context, e *Event) (err error) {
 	return nil
 }
 
-func (q *kafkabus) Next(ctx context.Context, listenerId string, e *Event) (err error) {
+func (q *kafkaQueue) Pop(ctx context.Context, listenerId string, e *Event) (err error) {
 	q.readersLock.RLock()
 	reader, ok := q.readers[listenerId]
 	q.readersLock.RUnlock()
@@ -96,8 +96,8 @@ func (q *kafkabus) Next(ctx context.Context, listenerId string, e *Event) (err e
 	for _, h := range msg.Headers {
 		val := make([]byte, len(h.Value))
 		copy(val, h.Value)
-		if h.Key == kafkaTypeKey {
-			e.Type = string(val)
+		if h.Key == kafkaNameKey {
+			e.Name = string(val)
 			continue
 		}
 		e.Metadata[h.Key] = string(val)
@@ -109,7 +109,7 @@ func (q *kafkabus) Next(ctx context.Context, listenerId string, e *Event) (err e
 	return
 }
 
-func (q *kafkabus) Close() error {
+func (q *kafkaQueue) Close() error {
 	q.readersLock.Lock()
 	for k, reader := range q.readers {
 		reader.Close()

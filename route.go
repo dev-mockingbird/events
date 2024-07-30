@@ -2,16 +2,18 @@ package events
 
 import (
 	"context"
-	"errors"
+	"fmt"
 )
 
 var (
-	ErrUnsupportedEventType = errors.New("unsuppored event typee")
+	ErrUnsupportedEvent = func(name string) error {
+		return fmt.Errorf("unsuppored event [%s]", name)
+	}
 )
 
 type Router interface {
 	Handler
-	On(typ string, h Handler) Router
+	ON(name string, h Handler) Router
 }
 
 type router struct {
@@ -20,20 +22,20 @@ type router struct {
 
 var _ Router = &router{}
 
-func On(typ string, h Handler) Router {
+func ON(name string, h Handler) Router {
 	r := router{records: make(map[string]Handler)}
-	return r.On(typ, h)
+	return r.ON(name, h)
 }
 
-func (r *router) On(typ string, h Handler) Router {
+func (r *router) ON(typ string, h Handler) Router {
 	r.records[typ] = h
 	return r
 }
 
 func (r *router) Handle(ctx context.Context, e *Event) error {
-	handler, ok := r.records[e.Type]
+	handler, ok := r.records[e.Name]
 	if !ok {
-		return ErrUnsupportedEventType
+		return ErrUnsupportedEvent(e.Name)
 	}
 	return handler.Handle(ctx, e)
 }

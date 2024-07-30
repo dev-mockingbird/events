@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestKafkaBus(t *testing.T) {
+func TestKafkaQueue(t *testing.T) {
 	// broker := "127.0.0.1:9092"
 	// topic := "test-1234"
 	broker := os.Getenv("KAFKA_BROKERS")
@@ -28,8 +28,8 @@ func TestKafkaBus(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			q := KafkaBus(KafkaBrokers(brokers...), KafkaTopic(topic))
-			DefaultListener(fmt.Sprintf("%d", id)).Listen(ctx, q, Handle(func(ctx context.Context, e *Event) error {
+			listener := GetListener(fmt.Sprintf("%d", id), KafkaQueue(KafkaBrokers(brokers...), KafkaTopic(topic)))
+			listener.Listen(ctx, Handle(func(ctx context.Context, e *Event) error {
 				var i int
 				if err = e.UnpackPayload(&i); err != nil {
 					panic(err)
@@ -43,17 +43,17 @@ func TestKafkaBus(t *testing.T) {
 				lock.Unlock()
 				t.Logf("id: %d, value: %d\n", id, result[id])
 				if i >= 9 {
-					return ListenComplete
+					listener.Stop()
 				}
 				return nil
 			}))
 		}(i)
 	}
-	q := KafkaBus(KafkaBrokers(brokers...), KafkaTopic(topic))
+	q := KafkaQueue(KafkaBrokers(brokers...), KafkaTopic(topic))
 	var total int
 	for i := 0; i < 10; i++ {
 		total += i
-		if err := q.Add(ctx, New("test", Json(i))); err != nil {
+		if err := q.Push(ctx, New("test", Json(i))); err != nil {
 			t.Fatal(err)
 		}
 	}

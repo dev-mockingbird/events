@@ -90,7 +90,7 @@ func (m *memorybus) start() {
 	}()
 }
 
-func newMemorybusEntry(bus *memorybus, bufSize int) *memorybusEntry {
+func newMemorybusEntry(bus *memorybus) *memorybusEntry {
 	return &memorybusEntry{
 		id:        uuid.New(),
 		listeners: make(map[string]*chan Event),
@@ -100,13 +100,13 @@ func newMemorybusEntry(bus *memorybus, bufSize int) *memorybusEntry {
 
 var lock sync.Mutex
 
-func MemoryEventBus(name string, bufSize int) EventBus {
+func MemoryEventBus(name string, bufSize int) EventQueue {
 	lock.Lock()
 	defer lock.Unlock()
 	name = "memory-" + name
 	bus := memorybuses.get(name)
 	if bus != nil {
-		entry := newMemorybusEntry(bus, bufSize)
+		entry := newMemorybusEntry(bus)
 		bus.entries = append(bus.entries, entry)
 		return entry
 	}
@@ -115,24 +115,24 @@ func MemoryEventBus(name string, bufSize int) EventBus {
 		name: name,
 		ch:   &ch,
 	}
-	entry := newMemorybusEntry(bus, bufSize)
+	entry := newMemorybusEntry(bus)
 	bus.entries = append(bus.entries, entry)
 	memorybuses.add(bus)
 	bus.start()
 	return entry
 }
 
-func (q *memorybusEntry) Name() string {
+func (q *memorybusEntry) Topic() string {
 	return q.memorybus.name
 }
 
-func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
+func (q *memorybusEntry) Push(ctx context.Context, e *Event) error {
 	if err := e.PackPayload(); err != nil {
 		return err
 	}
 	ch := make(chan struct{}, 1)
 	go func() {
-		me := GetEvent("")
+		me := Get("")
 		Copy(me, e)
 		*q.memorybus.ch <- *me
 		ch <- struct{}{}
@@ -145,7 +145,7 @@ func (q *memorybusEntry) Add(ctx context.Context, e *Event) error {
 	}
 }
 
-func (q *memorybusEntry) Next(ctx context.Context, listenerId string, e *Event) error {
+func (q *memorybusEntry) Pop(ctx context.Context, listenerId string, e *Event) error {
 	ch := make(chan struct{}, 1)
 	var err error
 	go func() {

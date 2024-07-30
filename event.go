@@ -22,8 +22,7 @@ const (
 
 var (
 	// ListenComplete the listener shold quit listen with no error if ListenComplete returned by event.Handler
-	ListenComplete      = errors.New("listen complete")
-	NoEncodingHint      = errors.New("no encoding hint presence in metadata")
+	ErrNoEncodingHint   = errors.New("no encoding hint presence in metadata")
 	UnsupportedEncoding = func(hint string) error {
 		return fmt.Errorf("unsupported encoding hint: %s", hint)
 	}
@@ -51,8 +50,8 @@ const (
 
 // Event the event representation definition
 type Event struct {
-	// Type event type, it should a dot joint string, such as "channel.message.created"
-	Type string `json:"type"`
+	// Name event type, it should a dot joint string, such as "channel.message.created"
+	Name string `json:"name"`
 	// Metadata the metadata describes the primary info as a significant part of the event
 	// such as {encoding-hint: encoding/json}, it expresses how to decode the payload
 	// key should be "-" splited string and all lower cases
@@ -69,7 +68,7 @@ type Event struct {
 }
 
 func Copy(dst, src *Event) {
-	dst.Type = src.Type
+	dst.Name = src.Name
 	dst.Metadata = make(map[string]string, len(src.Metadata))
 	for k, v := range src.Metadata {
 		dst.Metadata[k] = v
@@ -89,9 +88,9 @@ func Copy(dst, src *Event) {
 // example:
 //
 //	events.New("test", []byte("{\"name\": \"\hello\"}")).With(events.EncodingHint, EncodingJson)
-func New(typ string, payloads ...Payloader) *Event {
+func New(name string, payloads ...Payloader) *Event {
 	return &Event{
-		Type:            typ,
+		Name:            name,
 		Metadata:        make(map[string]string),
 		CreateTimestamp: time.Now().Unix(),
 		payloader: func() Payloader {
@@ -104,9 +103,10 @@ func New(typ string, payloads ...Payloader) *Event {
 	}
 }
 
-func GetEvent(typ string, payloads ...Payloader) *Event {
+// Get evnet from event pool
+func Get(name string, payloads ...Payloader) *Event {
 	e := eventPool.Get().(*Event)
-	e.Type = typ
+	e.Name = name
 	e.Metadata = make(map[string]string)
 	e.CreateTimestamp = time.Now().Unix()
 	e.Payload = nil
@@ -120,6 +120,7 @@ func GetEvent(typ string, payloads ...Payloader) *Event {
 	return e
 }
 
+// Put event to pool
 func Put(e *Event) {
 	eventPool.Put(e)
 }
@@ -151,7 +152,7 @@ func (e *Event) UnpackPayload(data any, unpackers ...PayloadUnpacker) error {
 	}
 	hint, ok := e.Metadata[Encoding]
 	if !ok {
-		return NoEncodingHint
+		return ErrNoEncodingHint
 	}
 	for _, unpacker := range unpackers {
 		if unpacker.Encoding() == hint {
@@ -166,19 +167,28 @@ func (e *Event) UnpackPayload(data any, unpackers ...PayloadUnpacker) error {
 	return UnsupportedEncoding(hint)
 }
 
-// EventBus, an event bus
-type EventBus interface {
-	// Name, the queue must have a name, the logger will use this to record the activitity
-	Name() string
-	// Add, push event to the queue
-	Add(ctx context.Context, e *Event) error
-	// Next, grab next event from queue
-	Next(ctx context.Context, listenerId string, e *Event) error
+type Emitter interface {
+	Emit(e *Event) error
 }
 
-type ListenerRegisterer interface {
-	RegisterListener(id string)
-	UnregisterListener(id string)
+type Listener interface {
+	Listen(ctx context.Context, handler Handler) error
+	Stop() error
+}
+
+// EventQueue, an event bus
+type EventQueue interface {
+	// Topic
+	Topic() string
+	// Push event to the queue
+	Push(ctx context.Context, e *Event) error
+	// Pop event from queue
+	Pop(ctx context.Context, listenerId string, e *Event) error
+}
+
+type EmittedEventQueue interface {
+	Emitter() Emitter
+	Listener(name string, opts ...Option) Listener
 }
 
 // Closer
@@ -194,7 +204,7 @@ type Handler interface {
 	Handle(ctx context.Context, e *Event) error
 }
 
-// Handle, an sophisticated Handler which transforms a function to a handler
+// Handle is an sophisticated Handler which transforms a function to a handler
 // example:
 //
 //	events.Handle(func(context.Background(), e *Event) error { return nil })
