@@ -21,7 +21,7 @@ const (
 )
 
 var (
-	// ListenComplete the listener shold quit listen with no error if ListenComplete returned by event.Handler
+	// ErrNoEncodingHint
 	ErrNoEncodingHint   = errors.New("no encoding hint presence in metadata")
 	UnsupportedEncoding = func(hint string) error {
 		return fmt.Errorf("unsupported encoding hint: %s", hint)
@@ -41,11 +41,6 @@ var (
 			return &Event{}
 		},
 	}
-)
-
-const (
-	// StopListen the listener should quit listen with no error if StopListen type message received from queue
-	StopListen = "listen.stop"
 )
 
 // Event the event representation definition
@@ -168,7 +163,7 @@ func (e *Event) UnpackPayload(data any, unpackers ...PayloadUnpacker) error {
 }
 
 type Emitter interface {
-	Emit(e *Event) error
+	Emit(ctx context.Context, e *Event) error
 }
 
 type Listener interface {
@@ -183,7 +178,7 @@ type EventQueue interface {
 	// Push event to the queue
 	Push(ctx context.Context, e *Event) error
 	// Pop event from queue
-	Pop(ctx context.Context, listenerId string, e *Event) error
+	Pop(ctx context.Context, consumer string, e *Event) error
 }
 
 type EmittedEventQueue interface {

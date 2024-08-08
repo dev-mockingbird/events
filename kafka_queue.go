@@ -2,6 +2,8 @@ package events
 
 import (
 	"context"
+	"errors"
+	"io"
 	"sync"
 
 	"github.com/segmentio/kafka-go"
@@ -9,35 +11,40 @@ import (
 
 const kafkaNameKey = "__name__"
 
+type kafkaReadContext struct {
+	reader  *kafka.Reader
+	reading bool
+}
+
 type kafkaQueue struct {
-	config      KafkaEventBusConfig
+	config      KafkaEventQueueConfig
 	w           *kafka.Writer
 	wOnce       sync.Once
-	readers     map[string]*kafka.Reader
+	readers     map[string]*kafkaReadContext
 	readersLock sync.RWMutex
 }
 
-type KafkaEventBusConfig struct {
+type KafkaEventQueueConfig struct {
 	Brokers []string
 	Topic   string
 }
 
-type KafkaEventBusOption func(config *KafkaEventBusConfig)
+type KafkaEventQueueOption func(config *KafkaEventQueueConfig)
 
-func KafkaBrokers(brokers ...string) KafkaEventBusOption {
-	return func(config *KafkaEventBusConfig) {
+func KafkaBrokers(brokers ...string) KafkaEventQueueOption {
+	return func(config *KafkaEventQueueConfig) {
 		config.Brokers = brokers
 	}
 }
 
-func KafkaTopic(topic string) KafkaEventBusOption {
-	return func(config *KafkaEventBusConfig) {
+func KafkaTopic(topic string) KafkaEventQueueOption {
+	return func(config *KafkaEventQueueConfig) {
 		config.Topic = topic
 	}
 }
 
-func KafkaQueue(opts ...KafkaEventBusOption) EventQueue {
-	q := kafkaQueue{readers: make(map[string]*kafka.Reader)}
+func KafkaQueue(opts ...KafkaEventQueueOption) EventQueue {
+	q := kafkaQueue{readers: make(map[string]*kafkaReadContext)}
 	for _, opt := range opts {
 		opt(&q.config)
 	}
@@ -74,24 +81,32 @@ func (q *kafkaQueue) Push(ctx context.Context, e *Event) (err error) {
 	return nil
 }
 
-func (q *kafkaQueue) Pop(ctx context.Context, listenerId string, e *Event) (err error) {
+func (q *kafkaQueue) Pop(ctx context.Context, consumer string, e *Event) (err error) {
 	q.readersLock.RLock()
-	reader, ok := q.readers[listenerId]
+	readCtx, ok := q.readers[consumer]
 	q.readersLock.RUnlock()
 	if !ok {
-		reader = kafka.NewReader(kafka.ReaderConfig{
-			Brokers: q.config.Brokers,
-			Topic:   q.config.Topic,
-			GroupID: listenerId,
-		})
+		readCtx = &kafkaReadContext{
+			reader: kafka.NewReader(kafka.ReaderConfig{
+				Brokers: q.config.Brokers,
+				Topic:   q.config.Topic,
+				GroupID: consumer,
+			}),
+		}
 		q.readersLock.Lock()
-		q.readers[listenerId] = reader
+		q.readers[consumer] = readCtx
 		q.readersLock.Unlock()
 	}
 	var msg kafka.Message
-	if msg, err = reader.ReadMessage(ctx); err != nil {
+	readCtx.reading = true
+	if msg, err = readCtx.reader.ReadMessage(ctx); err != nil {
+		if !readCtx.reading && errors.Is(err, io.EOF) {
+			err = nil
+		}
+		readCtx.reading = false
 		return
 	}
+	readCtx.reading = false
 	e.Metadata = make(map[string]string)
 	for _, h := range msg.Headers {
 		val := make([]byte, len(h.Value))
@@ -111,9 +126,11 @@ func (q *kafkaQueue) Pop(ctx context.Context, listenerId string, e *Event) (err 
 
 func (q *kafkaQueue) Close() error {
 	q.readersLock.Lock()
-	for k, reader := range q.readers {
-		reader.Close()
-		delete(q.readers, k)
+	for _, reader := range q.readers {
+		reader.reading = false
+		if err := reader.reader.Close(); err != nil {
+			return err
+		}
 	}
 	q.readersLock.Unlock()
 	if q.w != nil {
