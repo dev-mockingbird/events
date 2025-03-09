@@ -29,7 +29,7 @@ func TestKafkaQueue(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			listener := GetListener(fmt.Sprintf("%d", id), KafkaQueue(KafkaBrokers(brokers...), KafkaTopic(topic)))
-			listener.Listen(ctx, Handle(func(ctx context.Context, e *Event) error {
+			listener.Listen(ctx, Handle(func(e *Event) error {
 				var i int
 				if err = e.UnpackPayload(&i); err != nil {
 					panic(err)

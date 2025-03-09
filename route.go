@@ -1,7 +1,6 @@
 package events
 
 import (
-	"context"
 	"fmt"
 )
 
@@ -32,10 +31,10 @@ func (r *router) ON(typ string, h Handler) Router {
 	return r
 }
 
-func (r *router) Handle(ctx context.Context, e *Event) error {
+func (r *router) Handle(e *Event) error {
 	handler, ok := r.records[e.Name]
 	if !ok {
 		return ErrUnsupportedEvent(e.Name)
 	}
-	return handler.Handle(ctx, e)
+	return handler.Handle(e)
 }

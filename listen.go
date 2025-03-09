@@ -117,7 +117,7 @@ func (l *defaultListener) listen(ctx context.Context, handler Handler) error {
 	}
 	l.logger.Logf(logf.Debug, "received message [%s]", e.Name)
 	l.logger.Logf(logf.Trace, " payload: %s", e.Payload)
-	if err := handler.Handle(ctx, e); err != nil {
+	if err := handler.Handle(e); err != nil {
 		l.logger.Logf(logf.Error, "handler return an error: %s", err.Error())
 	}
 	return nil

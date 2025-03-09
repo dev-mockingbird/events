@@ -29,7 +29,7 @@ func TestDefaultListener(t *testing.T) {
 	var ct int
 	go func() {
 		defer wg.Done()
-		listener.Listen(context.Background(), Handle(func(ctx context.Context, e *Event) error {
+		listener.Listen(context.Background(), Handle(func(e *Event) error {
 			var i int
 			if err := e.UnpackPayload(&i); err != nil {
 				return err

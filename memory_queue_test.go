@@ -21,7 +21,7 @@ func TestMemoryEventBus_moreListener(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			listener := GetListener(fmt.Sprintf("%d", id), q)
-			listener.Listen(ctx, Handle(func(ctx context.Context, e *Event) error {
+			listener.Listen(ctx, Handle(func(e *Event) error {
 				lock.Lock()
 				result += id
 				lock.Unlock()

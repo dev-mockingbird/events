@@ -27,7 +27,7 @@ var (
 		return fmt.Errorf("unsupported encoding hint: %s", hint)
 	}
 	LogHandler = func(lgr logf.Logfer) Handler {
-		return Handle(func(ctx context.Context, e *Event) error {
+		return Handle(func(e *Event) error {
 			bs, err := json.Marshal(e)
 			if err != nil {
 				return err
@@ -196,16 +196,16 @@ type Closer interface {
 type Handler interface {
 	// Handle, handle the event. if the method returns an error, the listener should quit listen with the error.
 	// ListenComplete indicates listener that the listen should be completed. if this special "error" returned, the listen should quit without error
-	Handle(ctx context.Context, e *Event) error
+	Handle(e *Event) error
 }
 
 // Handle is an sophisticated Handler which transforms a function to a handler
 // example:
 //
 //	events.Handle(func(context.Background(), e *Event) error { return nil })
-type Handle func(ctx context.Context, e *Event) error
+type Handle func(e *Event) error
 
 // Handle implement the Handler
-func (handle Handle) Handle(ctx context.Context, e *Event) error {
-	return handle(ctx, e)
+func (handle Handle) Handle(e *Event) error {
+	return handle(e)
 }
